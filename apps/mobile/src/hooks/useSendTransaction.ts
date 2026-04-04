@@ -1,47 +1,42 @@
+/**
+ * Public send hook — routes transactions through the Safe smart account.
+ *
+ * For native ETH: sendTransaction({ to, value })
+ * For ERC-20: sendTransaction({ to: tokenAddress, data: transfer calldata })
+ */
 import { useCallback } from 'react';
-import { parseUnits, parseEther, erc20Abi } from 'viem';
-import { baseSepolia } from 'viem/chains';
-import { dynamicClient } from '../../client';
-import { useWallet } from './useWallet';
+import { parseUnits, parseEther, encodeFunctionData, erc20Abi } from 'viem';
+import type { SmartAccountClient } from 'permissionless';
 import { TOKEN_BY_SYMBOL } from '../services/unlinkClient';
 
-export function useSendTransaction() {
-  const { wallets } = useWallet();
-
+export function useSendTransaction(smartAccountClient: SmartAccountClient | null) {
   const sendPublic = useCallback(
     async (to: string, amount: string, tokenSymbol: string): Promise<string> => {
-      const wallet = wallets[0];
-      if (!wallet) throw new Error('No wallet connected');
+      if (!smartAccountClient) throw new Error('Safe wallet not ready');
 
       const token = TOKEN_BY_SYMBOL[tokenSymbol];
       if (!token) throw new Error(`Unknown token: ${tokenSymbol}`);
 
-      const walletClient = await dynamicClient.viem.createWalletClient({
-        wallet,
-        chain: baseSepolia,
-      });
-
       if (token.isNative) {
-        // Native ETH transfer
-        const hash = await walletClient.sendTransaction({
+        const hash = await smartAccountClient.sendTransaction({
           to: to as `0x${string}`,
           value: parseEther(amount),
-          chain: baseSepolia,
         });
         return hash;
       } else {
-        // ERC-20 transfer
-        const hash = await walletClient.writeContract({
-          address: token.address as `0x${string}`,
-          abi: erc20Abi,
-          functionName: 'transfer',
-          args: [to as `0x${string}`, parseUnits(amount, token.decimals)],
-          chain: baseSepolia,
+        const hash = await smartAccountClient.sendTransaction({
+          to: token.address as `0x${string}`,
+          data: encodeFunctionData({
+            abi: erc20Abi,
+            functionName: 'transfer',
+            args: [to as `0x${string}`, parseUnits(amount, token.decimals)],
+          }),
+          value: 0n,
         });
         return hash;
       }
     },
-    [wallets],
+    [smartAccountClient],
   );
 
   return { sendPublic };

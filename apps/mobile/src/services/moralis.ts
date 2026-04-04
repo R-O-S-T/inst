@@ -82,3 +82,82 @@ export function clearTokenCache() {
   cachedTokens = null;
   cacheTimestamp = 0;
 }
+
+// ── Wallet History ───────────────────────────────────────────────────
+
+export interface MoralisNativeTransfer {
+  value_formatted: string;
+  token_symbol: string;
+}
+
+export interface MoralisErc20Transfer {
+  value_formatted: string;
+  token_symbol: string;
+  token_logo: string | null;
+  address: string;
+}
+
+export interface MoralisHistoryItem {
+  hash: string;
+  from_address: string;
+  to_address: string;
+  value: string;
+  block_timestamp: string;
+  category: string;
+  summary: string;
+  native_transfers: MoralisNativeTransfer[];
+  erc20_transfers: MoralisErc20Transfer[];
+}
+
+interface MoralisHistoryResponse {
+  result: MoralisHistoryItem[];
+  cursor?: string;
+}
+
+let cachedHistory: MoralisHistoryItem[] | null = null;
+let historyCacheTimestamp = 0;
+let historyCacheAddress = '';
+const HISTORY_CACHE_TTL_MS = 30_000; // 30 seconds
+
+export async function getWalletHistory(
+  walletAddress: string,
+  chain = 'base sepolia',
+  forceRefresh = false,
+): Promise<MoralisHistoryItem[]> {
+  const now = Date.now();
+
+  if (
+    !forceRefresh &&
+    cachedHistory &&
+    historyCacheAddress === walletAddress &&
+    now - historyCacheTimestamp < HISTORY_CACHE_TTL_MS
+  ) {
+    return cachedHistory;
+  }
+
+  const params = new URLSearchParams({ chain });
+
+  const res = await fetch(
+    `${BASE_URL}/wallets/${walletAddress}/history?${params}`,
+    { headers: { 'X-API-Key': MORALIS_API_KEY } },
+  );
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    console.warn('[moralis] history fetch failed:', res.status, text);
+    return cachedHistory || [];
+  }
+
+  const data = (await res.json()) as MoralisHistoryResponse;
+
+  cachedHistory = data.result ?? [];
+  historyCacheTimestamp = now;
+  historyCacheAddress = walletAddress;
+
+  return cachedHistory;
+}
+
+export function clearHistoryCache() {
+  cachedHistory = null;
+  historyCacheTimestamp = 0;
+}

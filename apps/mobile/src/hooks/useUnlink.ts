@@ -4,9 +4,19 @@ import { baseSepolia } from 'viem/chains';
 
 import { dynamicClient } from '../../client';
 import { useWallet } from './useWallet';
-import { createUnlinkFromSeed, ULNKM, TOKEN_BY_SYMBOL } from '../services/unlinkClient';
+import { createUnlinkFromSeed, ULNKM, TOKEN_BY_SYMBOL, ENGINE_URL } from '../services/unlinkClient';
+import { UNLINK_API_KEY } from '../config/secrets';
 
 const BALANCE_POLL_MS = 30_000;
+
+export interface UnlinkTransaction {
+  tx_id: string;
+  type: 'deposit' | 'transfer' | 'withdraw';
+  status: string;
+  token: string;
+  amount: string;
+  created_at: string;
+}
 
 function tokenAddr(symbol?: string): string {
   if (!symbol) return ULNKM.address;
@@ -237,6 +247,28 @@ export function useUnlink() {
     [refreshBalance],
   );
 
+  const getTransactions = useCallback(async (): Promise<UnlinkTransaction[]> => {
+    if (!unlinkAddress) return [];
+
+    try {
+      const res = await fetch(
+        `${ENGINE_URL}/users/${unlinkAddress}/transactions`,
+        { headers: { 'X-API-Key': UNLINK_API_KEY } },
+      );
+
+      if (!res.ok) {
+        console.warn('[useUnlink] tx fetch failed:', res.status);
+        return [];
+      }
+
+      const data = await res.json();
+      return (data.transactions ?? data) as UnlinkTransaction[];
+    } catch (err) {
+      console.warn('[useUnlink] tx fetch error', err);
+      return [];
+    }
+  }, [unlinkAddress]);
+
   const withdraw = useCallback(
     async (recipientEvmAddress: string, amount: string): Promise<string> => {
       const client = clientRef.current;
@@ -264,5 +296,6 @@ export function useUnlink() {
     deposit,
     withdraw,
     refreshBalance,
+    getTransactions,
   };
 }

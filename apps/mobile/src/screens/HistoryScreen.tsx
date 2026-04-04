@@ -1,12 +1,22 @@
 import React from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import type { Transaction } from '../types';
 import { formatAddress } from '../utils/format';
 
 interface HistoryScreenProps {
-  walletAddress?: string;
-  transactions?: Transaction[];
+  transactions: Transaction[];
+  isLoading: boolean;
+  onRefresh: () => void;
 }
+
+// ── Helpers ──────────────────────────────────────────────────────────
 
 function formatRelativeTime(timestamp: number): string {
   const diff = Date.now() - timestamp;
@@ -20,53 +30,69 @@ function formatRelativeTime(timestamp: number): string {
   return `${days}d ago`;
 }
 
-function StatusDot({ status }: { status: Transaction['status'] }) {
-  const color =
-    status === 'confirmed'
-      ? '#22C55E'
-      : status === 'pending'
-        ? '#F59E0B'
-        : '#EF4444';
-  return <View style={[styles.statusDot, { backgroundColor: color }]} />;
+function categoryLabel(tx: Transaction): string {
+  if (tx.mode === 'private') {
+    const labels: Record<string, string> = {
+      send: 'Private Transfer',
+      receive: 'Withdraw',
+    };
+    return labels[tx.type] ?? 'Private';
+  }
+
+  // Public tx: derive from type + token
+  if (tx.type === 'receive') {
+    return tx.token === 'ETH' ? 'Receive' : 'Token Receive';
+  }
+  return tx.token === 'ETH' ? 'Send' : 'Token Send';
 }
 
+function txIcon(tx: Transaction): { symbol: string; color: string } {
+  if (tx.mode === 'private') {
+    return { symbol: '\u21BB', color: '#8B5CF6' }; // ↻ purple
+  }
+  if (tx.type === 'send') {
+    return { symbol: '\u2191', color: '#EF4444' }; // ↑ red
+  }
+  return { symbol: '\u2193', color: '#22C55E' }; // ↓ green
+}
+
+// ── Transaction Row ──────────────────────────────────────────────────
+
 function TransactionItem({ tx }: { tx: Transaction }) {
+  const icon = txIcon(tx);
+  const label = categoryLabel(tx);
   const isSend = tx.type === 'send';
 
   return (
     <View style={styles.card}>
       <View style={styles.cardRow}>
         <View style={styles.iconContainer}>
-          <Text style={[styles.icon, { color: isSend ? '#EF4444' : '#22C55E' }]}>
-            {isSend ? '↑' : '↓'}
-          </Text>
+          <Text style={[styles.icon, { color: icon.color }]}>{icon.symbol}</Text>
         </View>
 
         <View style={styles.cardBody}>
           <View style={styles.topRow}>
             <Text style={styles.amount}>
-              {isSend ? '-' : '+'}{tx.amount} {tx.token}
+              {isSend ? '-' : '+'}
+              {tx.amount} {tx.token}
             </Text>
-            <View style={styles.rightGroup}>
-              <StatusDot status={tx.status} />
-              <Text style={styles.time}>{formatRelativeTime(tx.timestamp)}</Text>
-            </View>
+            <Text style={styles.time}>{formatRelativeTime(tx.timestamp)}</Text>
           </View>
 
           <View style={styles.bottomRow}>
-            <View
-              style={[
-                styles.modeBadge,
-                tx.mode === 'private' ? styles.modeBadgePrivate : styles.modeBadgePublic,
-              ]}
-            >
-              <Text style={styles.modeBadgeText}>
-                {tx.mode === 'private' ? 'Private' : 'Public'}
+            <Text style={styles.categoryLabel}>{label}</Text>
+
+            {tx.mode === 'private' && (
+              <View style={styles.privateBadge}>
+                <Text style={styles.privateBadgeText}>Private</Text>
+              </View>
+            )}
+
+            {tx.counterparty ? (
+              <Text style={styles.counterparty}>
+                {isSend ? 'To' : 'From'}: {formatAddress(tx.counterparty)}
               </Text>
-            </View>
-            <Text style={styles.counterparty}>
-              {isSend ? 'To' : 'From'}: {formatAddress(tx.counterparty)}
-            </Text>
+            ) : null}
           </View>
         </View>
       </View>
@@ -74,9 +100,21 @@ function TransactionItem({ tx }: { tx: Transaction }) {
   );
 }
 
+// ── Screen ───────────────────────────────────────────────────────────
+
 export function HistoryScreen({
-  transactions = [],
+  transactions,
+  isLoading,
+  onRefresh,
 }: HistoryScreenProps) {
+  if (isLoading && transactions.length === 0) {
+    return (
+      <View style={styles.emptyContainer}>
+        <ActivityIndicator size="large" color="#6366F1" />
+      </View>
+    );
+  }
+
   if (transactions.length === 0) {
     return (
       <View style={styles.emptyContainer}>
@@ -94,10 +132,19 @@ export function HistoryScreen({
         contentContainerStyle={styles.list}
         ListHeaderComponent={<Text style={styles.heading}>History</Text>}
         renderItem={({ item }) => <TransactionItem tx={item} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading}
+            onRefresh={onRefresh}
+            tintColor="#6366F1"
+          />
+        }
       />
     </View>
   );
 }
+
+// ── Styles ───────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
@@ -153,16 +200,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  rightGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
-  },
   time: {
     color: '#999999',
     fontSize: 12,
@@ -171,20 +208,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  modeBadge: {
+  categoryLabel: {
+    color: '#999999',
+    fontSize: 12,
+    marginRight: 8,
+  },
+  privateBadge: {
+    backgroundColor: 'rgba(139, 92, 246, 0.15)',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
     marginRight: 8,
   },
-  modeBadgePublic: {
-    backgroundColor: 'rgba(99, 102, 241, 0.15)',
-  },
-  modeBadgePrivate: {
-    backgroundColor: 'rgba(139, 92, 246, 0.15)',
-  },
-  modeBadgeText: {
-    color: '#6366F1',
+  privateBadgeText: {
+    color: '#8B5CF6',
     fontSize: 11,
     fontWeight: '600',
   },
