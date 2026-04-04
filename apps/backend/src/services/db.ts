@@ -72,14 +72,14 @@ export function getUserByEvmAddress(evmAddress: string) {
   if (stmt.step()) {
     const row = stmt.getAsObject();
     stmt.free();
-    return row as { id: number; evm_address: string; unlink_address: string | null; unlink_mnemonic: string | null; created_at: string };
+    return row as { id: number; evm_address: string; unlink_address: string | null; created_at: string };
   }
   stmt.free();
   return undefined;
 }
 
-export function updateUserUnlink(evmAddress: string, unlinkAddress: string, mnemonic: string) {
-  db.run('UPDATE users SET unlink_address = ?, unlink_mnemonic = ? WHERE evm_address = ?', [unlinkAddress, mnemonic, evmAddress]);
+export function updateUserUnlink(evmAddress: string, unlinkAddress: string) {
+  db.run('UPDATE users SET unlink_address = ? WHERE evm_address = ?', [unlinkAddress, evmAddress]);
   save();
 }
 

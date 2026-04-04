@@ -5,8 +5,7 @@ import type { Request, Response } from 'express';
 // Switch to '@wallet-in/shared/types.js' once the monorepo workspace is configured.
 import type { UserCreateWebhookPayload } from '../../../../packages/shared/types.js';
 import { webhookVerify } from '../middleware/webhookVerify.js';
-import { createUser, updateUserUnlink } from '../services/db.js';
-import { generateUserMnemonic } from '../services/unlink.js';
+import { createUser } from '../services/db.js';
 import { logger } from '../utils/logger.js';
 
 export const webhookRouter = Router();
@@ -29,21 +28,9 @@ webhookRouter.post(
     const { walletAddress } = payload.data;
     logger.info(`wallet.created webhook received for ${walletAddress}`);
 
-    // Persist user synchronously
+    // Persist user — Unlink wallet is set up client-side and registered via PUT /api/user/:addr/unlink
     createUser(walletAddress);
 
-    // Return 200 immediately; generate Unlink wallet async
     res.status(200).json({ received: true });
-
-    // Fire-and-forget: generate mnemonic + update DB
-    (async () => {
-      try {
-        const { mnemonic, unlinkAddress } = await generateUserMnemonic();
-        updateUserUnlink(walletAddress, unlinkAddress, mnemonic);
-        logger.info(`Unlink wallet created for ${walletAddress}: ${unlinkAddress}`);
-      } catch (err) {
-        logger.error(`Failed to create Unlink wallet for ${walletAddress}`, err);
-      }
-    })();
   },
 );
