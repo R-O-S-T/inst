@@ -36,22 +36,12 @@ export interface CreateGiftResponse {
 export interface GiftMetadataResponse {
   amount: string;
   token: string;
-  status: 'pending' | 'claimed' | 'cancelled';
+  status: 'pending' | 'claimed' | 'expired';
   createdAt: string;
 }
 
 export interface ClaimGiftRequest {
   receiverAddress: string;
-}
-
-export interface CancelGiftRequest {
-  senderAddress: string;
-}
-
-export interface CancelGiftResponse {
-  success: boolean;
-  txId?: string;
-  error?: string;
 }
 
 // ========== Route contract ==========
@@ -77,10 +67,6 @@ export interface CancelGiftResponse {
 // POST /api/gift/:claimCode/claim
 //   Body: ClaimGiftRequest
 //   Response: { success: true }
-//
-// POST /api/gift/:claimCode/cancel
-//   Body: CancelGiftRequest
-//   Response: CancelGiftResponse
 //
 // GET /api/health
 //   Response: { status: 'ok', timestamp: number }

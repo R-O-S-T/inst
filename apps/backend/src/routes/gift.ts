@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import crypto from 'node:crypto';
-import { getUserByEvmAddress, createGift, getGiftByClaimCode, claimGift, cancelGift } from '../services/db.js';
-import { generateGiftWallet, transferFromGiftWallet } from '../services/unlink.js';
+import { getUserByEvmAddress, createGift, getGiftByClaimCode, claimGift } from '../services/db.js';
+import { generateGiftWallet } from '../services/unlink.js';
 import { logger } from '../utils/logger.js';
 
 export const giftRouter = Router();
@@ -103,50 +103,6 @@ giftRouter.post('/gift/:claimCode/claim', (req: Request, res: Response) => {
     res.json({ success: true });
   } catch (err) {
     logger.error('POST /api/gift/:claimCode/claim failed', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// POST /api/gift/:claimCode/cancel — sender reclaims unclaimed gift
-giftRouter.post('/gift/:claimCode/cancel', async (req: Request, res: Response) => {
-  try {
-    const { senderAddress } = req.body ?? {};
-
-    if (!senderAddress) {
-      res.status(400).json({ error: 'Missing required field: senderAddress' });
-      return;
-    }
-
-    const gift = getGiftByClaimCode(req.params.claimCode);
-    if (!gift) {
-      res.status(404).json({ error: 'Gift not found' });
-      return;
-    }
-
-    if (gift.status !== 'pending') {
-      res.status(409).json({ error: `Gift already ${gift.status}` });
-      return;
-    }
-
-    if (gift.sender_evm !== senderAddress) {
-      res.status(403).json({ error: 'Only the sender can cancel this gift' });
-      return;
-    }
-
-    const sender = getUserByEvmAddress(senderAddress);
-    if (!sender?.unlink_address) {
-      res.status(400).json({ error: 'Sender has no Unlink wallet to refund to' });
-      return;
-    }
-
-    const txId = await transferFromGiftWallet(gift.gift_mnemonic, sender.unlink_address, gift.amount);
-    cancelGift(req.params.claimCode, txId);
-
-    logger.info(`Gift cancelled: code=${req.params.claimCode} txId=${txId}`);
-
-    res.json({ success: true, txId });
-  } catch (err) {
-    logger.error('POST /api/gift/:claimCode/cancel failed', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

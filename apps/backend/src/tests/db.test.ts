@@ -11,6 +11,8 @@ import {
   getGiftByClaimCode,
   claimGift,
   cancelGift,
+  getExpiredPendingGifts,
+  db,
 } from '../services/db.js';
 
 // Use a temp data dir so tests don't pollute the real DB
@@ -116,12 +118,12 @@ describe('gifts table', () => {
     assert.equal(gift.recipient_evm, '0xReceiver1'); // unchanged
   });
 
-  it('cancelGift sets status + tx_id', () => {
+  it('cancelGift sets status to expired + tx_id', () => {
     createGift('code_cancel', '0xSender1', '200', '0xToken', 'mnem', 'unlink1y');
     cancelGift('code_cancel', '0xTxHash123');
     const gift = getGiftByClaimCode('code_cancel');
     assert.ok(gift);
-    assert.equal(gift.status, 'cancelled');
+    assert.equal(gift.status, 'expired');
     assert.equal(gift.tx_id, '0xTxHash123');
   });
 
@@ -139,5 +141,39 @@ describe('gifts table', () => {
     assert.throws(() => {
       createGift('code_dup', '0xSender1', '999', '0xToken', 'mnem2', 'unlink1w');
     });
+  });
+});
+
+// ── getExpiredPendingGifts ──────────────────────────────────────────
+
+describe('getExpiredPendingGifts', () => {
+  it('returns pending gifts older than expiryMs', () => {
+    createGift('code_old', '0xSender1', '100', '0xToken', 'mnem_old', 'unlink1old');
+    // Manually backdate the created_at to 10 minutes ago
+    db.run(
+      "UPDATE gifts SET created_at = datetime('now', '-600 seconds') WHERE claim_code = 'code_old'",
+    );
+    const expired = getExpiredPendingGifts(300_000); // 5 min
+    const match = expired.find((g) => g.claim_code === 'code_old');
+    assert.ok(match, 'should find the backdated gift');
+    assert.equal(match.status, 'pending');
+  });
+
+  it('does not return recent pending gifts', () => {
+    createGift('code_recent', '0xSender1', '50', '0xToken', 'mnem_recent', 'unlink1recent');
+    const expired = getExpiredPendingGifts(300_000);
+    const match = expired.find((g) => g.claim_code === 'code_recent');
+    assert.equal(match, undefined, 'should not find a recently created gift');
+  });
+
+  it('does not return claimed or expired gifts', () => {
+    createGift('code_done', '0xSender1', '75', '0xToken', 'mnem_done', 'unlink1done');
+    db.run(
+      "UPDATE gifts SET created_at = datetime('now', '-600 seconds') WHERE claim_code = 'code_done'",
+    );
+    claimGift('code_done', '0xReceiver');
+    const expired = getExpiredPendingGifts(300_000);
+    const match = expired.find((g) => g.claim_code === 'code_done');
+    assert.equal(match, undefined, 'claimed gifts should not be returned');
   });
 });

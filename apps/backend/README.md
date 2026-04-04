@@ -1,6 +1,6 @@
 # Instant Backend
 
-Express API server for the Instant wallet app. Handles user registration via Dynamic webhooks, Unlink address registration, and gift link lifecycle (create, claim, cancel, refund).
+Express API server for the Instant wallet app. Handles user registration via Dynamic webhooks, Unlink address registration, and gift link lifecycle (create, claim, auto-expiry refund).
 
 ## Quick start
 
@@ -28,6 +28,7 @@ npm run dev             # http://localhost:3000
 | `RPC_URL` | No | Base Sepolia RPC URL (default: https://sepolia.base.org) |
 | `UNLINK_API_KEY` | Yes | API key for Unlink staging API |
 | `GIFT_BASE_URL` | No | Deep link base URL for gift claim links (default: https://app.example.com/claim/) |
+| `GIFT_EXPIRY_MS` | No | Milliseconds before an unclaimed gift is auto-refunded (default: 300000 = 5 min) |
 | `LOG_LEVEL` | No | Set to `debug` for verbose logging |
 
 ## API routes
@@ -63,10 +64,6 @@ GET /api/gift/:claimCode
 POST /api/gift/:claimCode/claim
 <- { receiverAddress }
 -> { success: true }
-
-POST /api/gift/:claimCode/cancel
-<- { senderAddress }
--> { success: true, txId }
 ```
 
 ### Webhooks
@@ -86,7 +83,7 @@ POST /webhooks/dynamic
 5. Receiver's app calls `POST /api/gift/:code/claim` to mark as claimed
 6. Receiver's app imports the gift wallet mnemonic from the deep link and sweeps funds to their own Unlink wallet (client-side)
 
-If unclaimed, the sender can call `POST /api/gift/:code/cancel` to refund -- the backend transfers from the gift wallet back to the sender's Unlink address.
+**Auto-expiry:** Unclaimed gifts are automatically refunded to the sender after `GIFT_EXPIRY_MS` (default 5 minutes for demo). A periodic check runs every 60 seconds, transfers funds from the gift wallet back to the sender's Unlink address, and marks the gift as `expired`.
 
 ## Architecture
 
@@ -94,7 +91,7 @@ If unclaimed, the sender can call `POST /api/gift/:code/cancel` to refund -- the
 src/
   index.ts              Express entry point
   routes/
-    gift.ts             Gift link CRUD (create, metadata, claim, cancel)
+    gift.ts             Gift link CRUD (create, metadata, claim)
     user.ts             User lookup + Unlink address registration
     webhook.ts          Dynamic wallet.created webhook handler
   services/

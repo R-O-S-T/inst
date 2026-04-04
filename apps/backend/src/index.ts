@@ -7,7 +7,10 @@ import { userRouter } from './routes/user.js';
 import { giftRouter } from './routes/gift.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { logger } from './utils/logger.js';
-import { initDb } from './services/db.js';
+import { initDb, getExpiredPendingGifts, cancelGift, getUserByEvmAddress } from './services/db.js';
+import { transferFromGiftWallet } from './services/unlink.js';
+
+const GIFT_EXPIRY_MS = Number(process.env.GIFT_EXPIRY_MS) || 300_000; // default 5 min
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,9 +36,30 @@ app.use('/api', giftRouter);
 // --------------- Error handling ---------------
 app.use(errorHandler);
 
+// --------------- Auto-expiry ---------------
+async function refundExpiredGifts() {
+  const expired = getExpiredPendingGifts(GIFT_EXPIRY_MS);
+  for (const gift of expired) {
+    try {
+      const sender = getUserByEvmAddress(gift.sender_evm);
+      if (!sender?.unlink_address) {
+        logger.warn(`Auto-expiry: sender ${gift.sender_evm} has no unlink address, skipping code=${gift.claim_code}`);
+        continue;
+      }
+      const txId = await transferFromGiftWallet(gift.gift_mnemonic, sender.unlink_address, gift.amount);
+      cancelGift(gift.claim_code, txId);
+      logger.info(`Auto-expired gift: code=${gift.claim_code} txId=${txId}`);
+    } catch (err) {
+      logger.error(`Auto-expiry failed for code=${gift.claim_code}`, err);
+    }
+  }
+}
+
 // --------------- Start ---------------
 if (!process.env.TEST) {
   initDb().then(() => {
+    setInterval(refundExpiredGifts, 60_000);
+
     app.listen(PORT, () => {
       logger.info(`Backend listening on port ${PORT}`);
     });

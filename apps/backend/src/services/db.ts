@@ -136,10 +136,24 @@ export function claimGift(code: string, recipientEvm: string) {
 
 export function cancelGift(code: string, txId: string) {
   db.run(
-    "UPDATE gifts SET status = 'cancelled', tx_id = ? WHERE claim_code = ? AND status = 'pending'",
+    "UPDATE gifts SET status = 'expired', tx_id = ? WHERE claim_code = ? AND status = 'pending'",
     [txId, code],
   );
   save();
+}
+
+export function getExpiredPendingGifts(expiryMs: number): GiftRow[] {
+  const expirySeconds = Math.floor(expiryMs / 1000);
+  const stmt = db.prepare(
+    `SELECT * FROM gifts WHERE status = 'pending' AND created_at <= datetime('now', '-' || ? || ' seconds')`,
+    [expirySeconds],
+  );
+  const results: GiftRow[] = [];
+  while (stmt.step()) {
+    results.push(stmt.getAsObject() as GiftRow);
+  }
+  stmt.free();
+  return results;
 }
 
 export { db };

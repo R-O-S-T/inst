@@ -171,36 +171,6 @@ describe('POST /api/gift/:claimCode/claim', () => {
   });
 });
 
-// ── POST /api/gift/:claimCode/cancel ────────────────────────────────
-
-describe('POST /api/gift/:claimCode/cancel', () => {
-  it('returns 400 if senderAddress missing', async () => {
-    const { status } = await request('POST', '/api/gift/testcode123/cancel', {});
-    assert.equal(status, 400);
-  });
-
-  it('returns 409 for already-claimed gift', async () => {
-    const { status } = await request('POST', '/api/gift/testcode123/cancel', {
-      senderAddress: '0xSenderGift',
-    });
-    // testcode123 was claimed in previous test
-    assert.equal(status, 409);
-  });
-
-  it('returns 403 if not the sender', async () => {
-    // Create a fresh gift for cancel tests
-    createGift('testcode_cancel', '0xSenderGift', '300', '0xToken', 'gift_mnem3', 'unlink1gift3');
-
-    const { status } = await request('POST', '/api/gift/testcode_cancel/cancel', {
-      senderAddress: '0xReceiverGift', // wrong sender
-    });
-    assert.equal(status, 403);
-  });
-
-  // Note: actual cancel success calls transferFromGiftWallet which hits Unlink API.
-  // That's an integration test — skip in unit tests.
-});
-
 // ── POST /api/gift (create) — validation only ───────────────────────
 
 describe('POST /api/gift (validation)', () => {
