@@ -14,6 +14,7 @@ interface ConfirmModalProps {
   recipient: string;
   amount: string;
   mode: 'public' | 'private';
+  token?: string;
   onConfirm: () => void;
   onCancel: () => void;
   status: 'idle' | 'pending' | 'success' | 'error';
@@ -25,6 +26,7 @@ export function ConfirmModal({
   recipient,
   amount,
   mode,
+  token = 'ETH',
   onConfirm,
   onCancel,
   status,
@@ -52,7 +54,7 @@ export function ConfirmModal({
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Amount</Text>
-            <Text style={styles.rowValue}>{amount} ETH</Text>
+            <Text style={styles.rowValue}>{amount} {token}</Text>
           </View>
 
           <View style={styles.row}>

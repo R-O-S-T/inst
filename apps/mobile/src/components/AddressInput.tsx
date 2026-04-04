@@ -24,11 +24,6 @@ export function AddressInput({ value, onChange, addressType }: AddressInputProps
           autoCorrect={false}
         />
       </View>
-      {addressType === 'evm' && (
-        <View style={[styles.badge, styles.badgePublic]}>
-          <Text style={styles.badgePublicText}>Public send</Text>
-        </View>
-      )}
       {addressType === 'unlink' && (
         <View style={[styles.badge, styles.badgePrivate]}>
           <Text style={styles.badgePrivateText}>Private send</Text>

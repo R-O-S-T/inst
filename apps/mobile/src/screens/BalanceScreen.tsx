@@ -128,6 +128,7 @@ export function BalanceScreen({
               balance={evmBalance}
               token="ETH"
               isLoading={isLoading}
+              formatted
             />
           )}
         </View>
@@ -143,7 +144,7 @@ export function BalanceScreen({
             </View>
           ) : (
             <BalanceCard
-              label="Private Balance"
+              label="ULNKm Balance"
               balance={unlinkBalance}
               token="ULNKm"
               isLoading={isLoading}

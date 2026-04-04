@@ -1,17 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
-import { formatBalance } from '../utils/format';
-
 interface BalanceCardProps {
   label: string;
   balance: string;
   token: string;
   isLoading: boolean;
-  /** If true, balance is already human-readable — skip wei conversion */
-  formatted?: boolean;
 }
 
-export function BalanceCard({ label, balance, token, isLoading, formatted = false }: BalanceCardProps) {
+export function BalanceCard({ label, balance, token, isLoading }: BalanceCardProps) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -37,7 +33,7 @@ export function BalanceCard({ label, balance, token, isLoading, formatted = fals
     pulseAnim.setValue(1);
   }, [isLoading, pulseAnim]);
 
-  const displayBalance = isLoading ? '---' : (formatted ? balance : formatBalance(balance));
+  const displayBalance = isLoading ? '---' : balance;
 
   return (
     <View style={styles.card}>
