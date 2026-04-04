@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { createPublicClient, http, formatEther } from 'viem';
+import { createPublicClient, http, formatEther, formatUnits, erc20Abi } from 'viem';
 import { baseSepolia } from 'viem/chains';
+import { TOKENS } from '../services/unlinkClient';
 
 const POLL_INTERVAL_MS = 15_000;
 
@@ -9,14 +10,10 @@ const publicClient = createPublicClient({
   transport: http(),
 });
 
-/**
- * Fetches on-chain EVM balance for the given wallet address.
- *
- * Unlink balance and address are now managed by `useUnlink` and passed
- * through separately by the navigator; this hook no longer stubs them.
- */
+export type TokenBalances = Record<string, string>; // symbol → formatted balance
+
 export function useBalance(walletAddress: string | null) {
-  const [evmBalance, setEvmBalance] = useState<string>('0');
+  const [balances, setBalances] = useState<TokenBalances>({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,12 +28,28 @@ export function useBalance(walletAddress: string | null) {
     setError(null);
 
     try {
-      const rawBalance = await publicClient.getBalance({
-        address: addr as `0x${string}`,
+      const results: TokenBalances = {};
+
+      // Fetch all balances in parallel
+      const promises = TOKENS.map(async (token) => {
+        if (token.isNative) {
+          const raw = await publicClient.getBalance({ address: addr as `0x${string}` });
+          results[token.symbol] = formatEther(raw);
+        } else {
+          const raw = await publicClient.readContract({
+            address: token.address as `0x${string}`,
+            abi: erc20Abi,
+            functionName: 'balanceOf',
+            args: [addr as `0x${string}`],
+          });
+          results[token.symbol] = formatUnits(raw, token.decimals);
+        }
       });
-      setEvmBalance(formatEther(rawBalance));
+
+      await Promise.all(promises);
+      setBalances(results);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch balance');
+      setError(err instanceof Error ? err.message : 'Failed to fetch balances');
     } finally {
       setIsLoading(false);
     }
@@ -44,12 +57,10 @@ export function useBalance(walletAddress: string | null) {
 
   useEffect(() => {
     if (!walletAddress) return;
-
     refetch();
-
     const id = setInterval(refetch, POLL_INTERVAL_MS);
     return () => clearInterval(id);
   }, [walletAddress, refetch]);
 
-  return { evmBalance, isLoading, error, refetch };
+  return { balances, isLoading, error, refetch };
 }

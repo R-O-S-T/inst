@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Text, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
@@ -8,6 +8,7 @@ import { useBalance } from '../hooks/useBalance';
 import { useSendTransaction } from '../hooks/useSendTransaction';
 import { useTransactions } from '../hooks/useTransactions';
 import { useUnlink } from '../hooks/useUnlink';
+import { TOKEN_BY_SYMBOL } from '../services/unlinkClient';
 import { parseUnits } from 'viem';
 
 import { AuthScreen } from '../screens/AuthScreen';
@@ -20,7 +21,7 @@ import { HistoryScreen } from '../screens/HistoryScreen';
 
 function ConnectedBalanceScreen() {
   const { address, logout } = useWallet();
-  const { evmBalance, isLoading, refetch } = useBalance(address);
+  const { balances, isLoading, refetch } = useBalance(address);
   const { unlinkAddress, unlinkBalance, refreshBalance } = useUnlink();
   const navigation = useNavigation<any>();
 
@@ -36,12 +37,19 @@ function ConnectedBalanceScreen() {
     await Promise.all([refetch(), refreshBalance()]);
   }, [refetch, refreshBalance]);
 
+  // Combined ULNKm balance = on-chain + pool
+  const totalUlnkm = useMemo(() => {
+    const onChain = parseFloat(balances['ULNKm'] || '0');
+    const pool = parseFloat(unlinkBalance) || 0;
+    return (onChain + pool).toString();
+  }, [balances, unlinkBalance]);
+
   return (
     <BalanceScreen
       evmAddress={address ?? undefined}
-      evmBalance={evmBalance}
+      evmBalance={balances['ETH'] || '0'}
       unlinkAddress={unlinkAddress}
-      unlinkBalance={unlinkBalance}
+      unlinkBalance={totalUlnkm}
       isLoading={isLoading}
       onRefresh={onRefresh}
       onNavigateSend={onNavigateSend}
@@ -53,10 +61,16 @@ function ConnectedBalanceScreen() {
 
 function ConnectedSendScreen() {
   const { address } = useWallet();
-  const { evmBalance } = useBalance(address);
-  const { unlinkBalance, transfer, privateSendToEvm } = useUnlink();
+  const { balances, refetch: refetchBalance } = useBalance(address);
+  const { unlinkBalance, transfer, privateSendToEvm, withdraw, refreshBalance } = useUnlink();
   const { sendPublic } = useSendTransaction();
   const { addTransaction } = useTransactions();
+
+  const totalUlnkm = useMemo(() => {
+    const onChain = parseFloat(balances['ULNKm'] || '0');
+    const pool = parseFloat(unlinkBalance) || 0;
+    return (onChain + pool).toString();
+  }, [balances, unlinkBalance]);
 
   const recordTx = useCallback(
     (to: string, amount: string, mode: 'public' | 'private', txHash: string) => {
@@ -86,9 +100,10 @@ function ConnectedSendScreen() {
   );
 
   const wrappedSendPrivate = useCallback(
-    async (to: string, amount: string): Promise<string> => {
-      const amountBigInt = parseUnits(amount, 18);
-      const txId = await transfer(to, amountBigInt);
+    async (to: string, amount: string, tokenSymbol: string): Promise<string> => {
+      const decimals = TOKEN_BY_SYMBOL[tokenSymbol]?.decimals ?? 18;
+      const amountBigInt = parseUnits(amount, decimals);
+      const txId = await transfer(to, amountBigInt, tokenSymbol);
       recordTx(to, amount, 'private', txId);
       return txId;
     },
@@ -96,9 +111,10 @@ function ConnectedSendScreen() {
   );
 
   const wrappedSendPrivateToEvm = useCallback(
-    async (to: string, amount: string): Promise<string> => {
-      const amountBigInt = parseUnits(amount, 18);
-      const txId = await privateSendToEvm(to, amountBigInt);
+    async (to: string, amount: string, tokenSymbol: string): Promise<string> => {
+      const decimals = TOKEN_BY_SYMBOL[tokenSymbol]?.decimals ?? 18;
+      const amountBigInt = parseUnits(amount, decimals);
+      const txId = await privateSendToEvm(to, amountBigInt, tokenSymbol);
       recordTx(to, amount, 'private', txId);
       return txId;
     },
@@ -107,8 +123,8 @@ function ConnectedSendScreen() {
 
   return (
     <SendScreen
-      evmBalance={evmBalance}
-      unlinkBalance={unlinkBalance}
+      balances={{ ...balances, ULNKm: totalUlnkm }}
+      unlinkBalance={totalUlnkm}
       senderAddress={address ?? undefined}
       onSendPublic={wrappedSendPublic}
       onSendPrivate={wrappedSendPrivate}

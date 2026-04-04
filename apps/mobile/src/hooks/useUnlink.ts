@@ -4,9 +4,34 @@ import { baseSepolia } from 'viem/chains';
 
 import { dynamicClient } from '../../client';
 import { useWallet } from './useWallet';
-import { createUnlinkFromSeed, TOKEN } from '../services/unlinkClient';
+import { createUnlinkFromSeed, ULNKM, TOKEN_BY_SYMBOL } from '../services/unlinkClient';
 
 const BALANCE_POLL_MS = 30_000;
+
+function tokenAddr(symbol?: string): string {
+  if (!symbol) return ULNKM.address;
+  return TOKEN_BY_SYMBOL[symbol]?.address || ULNKM.address;
+}
+
+/**
+ * Retry wrapper — viem's first call to eth_fillTransaction fails on public RPCs,
+ * but it caches the failure and uses standard methods on the second attempt.
+ */
+async function withRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      const msg = err?.message || '';
+      if (i < retries - 1 && (msg.includes('eth_fillTransaction') || msg.includes('ethRequest rejected'))) {
+        console.log('[useUnlink] Retrying after eth_fillTransaction error...');
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('withRetry exhausted');
+}
 
 const publicClient = createPublicClient({
   chain: baseSepolia,
@@ -39,15 +64,16 @@ export function useUnlink() {
     if (!client) return;
 
     try {
-      const balances = await client.getBalances({ token: TOKEN });
+      const balances = await client.getBalances({ token: ULNKM.address });
       const entry = balances.balances?.find(
-        (b: any) => b.token.toLowerCase() === TOKEN.toLowerCase(),
+        (b: any) => b.token.toLowerCase() === ULNKM.address.toLowerCase(),
       );
       const raw = BigInt(entry?.amount ?? '0');
       const whole = raw / 10n ** 18n;
       const frac = raw % 10n ** 18n;
       const fracStr = frac.toString().padStart(18, '0').replace(/0+$/, '');
       const formatted = fracStr ? `${whole}.${fracStr}` : whole.toString();
+      console.log('[useUnlink] balance:', formatted);
       setUnlinkBalance(formatted);
     } catch (err: unknown) {
       console.warn('[useUnlink] balance fetch failed', err);
@@ -91,10 +117,12 @@ export function useUnlink() {
 
         if (cancelled) return;
 
+        console.log('[useUnlink] initialized, address:', addr);
         setUnlinkAddress(addr);
         setIsReady(true);
 
         await refreshBalance();
+        console.log('[useUnlink] init complete');
       } catch (err: unknown) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Unlink init failed');
@@ -122,13 +150,13 @@ export function useUnlink() {
     const client = clientRef.current;
     if (!client) throw new Error('Unlink client not ready');
 
-    const approval = await client.ensureErc20Approval({ token: TOKEN, amount });
+    const approval = await withRetry(() => client.ensureErc20Approval({ token: ULNKM.address, amount }));
     if (approval.status === 'submitted') {
       await publicClient.waitForTransactionReceipt({
         hash: approval.txHash as `0x${string}`,
       });
     }
-    const result = await client.deposit({ token: TOKEN, amount });
+    const result = await client.deposit({ token: ULNKM.address, amount });
     await client.pollTransactionStatus(result.txId);
     await refreshBalance();
     return result.txId;
@@ -139,40 +167,31 @@ export function useUnlink() {
    * Auto-deposits from EVM wallet if pool balance is insufficient.
    */
   const transfer = useCallback(
-    async (recipientAddress: string, amount: bigint): Promise<string> => {
+    async (recipientAddress: string, amount: bigint, tokenSymbol?: string): Promise<string> => {
       const client = clientRef.current;
       if (!client) throw new Error('Unlink client not ready');
+      const tk = tokenAddr(tokenSymbol);
 
-      // Check pool balance, auto-deposit if needed
-      const balances = await client.getBalances({ token: TOKEN });
+      const balances = await client.getBalances({ token: tk });
       const entry = balances.balances?.find(
-        (b: any) => b.token.toLowerCase() === TOKEN.toLowerCase(),
+        (b: any) => b.token.toLowerCase() === tk.toLowerCase(),
       );
       const poolBalance = BigInt(entry?.amount ?? '0');
 
       if (poolBalance < amount) {
         const depositAmount = amount - poolBalance;
-        console.log(`[useUnlink] Auto-depositing ${depositAmount.toString()}`);
+        console.log(`[useUnlink] Auto-depositing ${depositAmount.toString()} of ${tk}`);
 
-        const approval = await client.ensureErc20Approval({
-          token: TOKEN,
-          amount: depositAmount.toString(),
-        });
+        const approval = await withRetry(() => client.ensureErc20Approval({ token: tk, amount: depositAmount.toString() }));
         if (approval.status === 'submitted') {
-          await publicClient.waitForTransactionReceipt({
-            hash: approval.txHash as `0x${string}`,
-          });
+          await publicClient.waitForTransactionReceipt({ hash: approval.txHash as `0x${string}` });
         }
 
-        const dep = await client.deposit({ token: TOKEN, amount: depositAmount.toString() });
+        const dep = await client.deposit({ token: tk, amount: depositAmount.toString() });
         await client.pollTransactionStatus(dep.txId);
       }
 
-      const result = await client.transfer({
-        recipientAddress,
-        token: TOKEN,
-        amount: amount.toString(),
-      });
+      const result = await client.transfer({ recipientAddress, token: tk, amount: amount.toString() });
       await client.pollTransactionStatus(result.txId);
       await refreshBalance();
       return result.txId;
@@ -186,41 +205,31 @@ export function useUnlink() {
    * Sender is PRIVATE, recipient and amount are PUBLIC.
    */
   const privateSendToEvm = useCallback(
-    async (recipientEvmAddress: string, amount: bigint): Promise<string> => {
+    async (recipientEvmAddress: string, amount: bigint, tokenSymbol?: string): Promise<string> => {
       const client = clientRef.current;
       if (!client) throw new Error('Unlink client not ready');
+      const tk = tokenAddr(tokenSymbol);
 
-      // Check pool balance, auto-deposit if needed
-      const balances = await client.getBalances({ token: TOKEN });
+      const balances = await client.getBalances({ token: tk });
       const entry = balances.balances?.find(
-        (b: any) => b.token.toLowerCase() === TOKEN.toLowerCase(),
+        (b: any) => b.token.toLowerCase() === tk.toLowerCase(),
       );
       const poolBalance = BigInt(entry?.amount ?? '0');
 
       if (poolBalance < amount) {
         const depositAmount = amount - poolBalance;
-        console.log(`[useUnlink] Auto-depositing ${depositAmount.toString()} for private EVM send`);
+        console.log(`[useUnlink] Auto-depositing ${depositAmount.toString()} of ${tk} for private EVM send`);
 
-        const approval = await client.ensureErc20Approval({
-          token: TOKEN,
-          amount: depositAmount.toString(),
-        });
+        const approval = await withRetry(() => client.ensureErc20Approval({ token: tk, amount: depositAmount.toString() }));
         if (approval.status === 'submitted') {
-          await publicClient.waitForTransactionReceipt({
-            hash: approval.txHash as `0x${string}`,
-          });
+          await publicClient.waitForTransactionReceipt({ hash: approval.txHash as `0x${string}` });
         }
 
-        const dep = await client.deposit({ token: TOKEN, amount: depositAmount.toString() });
+        const dep = await client.deposit({ token: tk, amount: depositAmount.toString() });
         await client.pollTransactionStatus(dep.txId);
       }
 
-      // Withdraw to recipient — sender is private
-      const result = await client.withdraw({
-        recipientEvmAddress,
-        token: TOKEN,
-        amount: amount.toString(),
-      });
+      const result = await client.withdraw({ recipientEvmAddress, token: tk, amount: amount.toString() });
       await client.pollTransactionStatus(result.txId);
       await refreshBalance();
       return result.txId;
@@ -235,7 +244,7 @@ export function useUnlink() {
 
       const result = await client.withdraw({
         recipientEvmAddress,
-        token: TOKEN,
+        token: ULNKM.address,
         amount,
       });
       await client.pollTransactionStatus(result.txId);
