@@ -1,35 +1,38 @@
 import { useCallback } from 'react';
-import { parseEther } from 'viem';
-import { baseSepolia } from 'viem/chains';
 import { dynamicClient } from '../../client';
 import { useWallet } from './useWallet';
+import { TOKEN } from '../services/unlinkClient';
 
 /**
- * Hook that exposes a `sendPublic` function for sending ETH
- * on-chain via Dynamic's viem wallet client.
+ * Hook that exposes `sendPublic` for on-chain sends via Dynamic's sendBalance API.
+ * Supports both native ETH and ERC-20 tokens (ULNKm).
  */
 export function useSendTransaction() {
   const { wallets } = useWallet();
 
   const sendPublic = useCallback(
-    async (to: string, amount: string): Promise<string> => {
+    async (to: string, amount: string, token: 'ETH' | 'ULNKm' = 'ETH'): Promise<string> => {
       const wallet = wallets[0];
       if (!wallet) {
         throw new Error('No wallet connected');
       }
 
-      const walletClient = await dynamicClient.viem.createWalletClient({
+      const params: Parameters<typeof dynamicClient.wallets.sendBalance>[0] = {
         wallet,
-        chain: baseSepolia,
-      });
+        amount,
+        toAddress: to,
+      };
 
-      const hash = await walletClient.sendTransaction({
-        to: to as `0x${string}`,
-        value: parseEther(amount),
-        chain: baseSepolia,
-      });
+      // For ERC-20 tokens, pass the token address + decimals
+      if (token === 'ULNKm') {
+        params.token = {
+          address: TOKEN,
+          decimals: 18,
+        };
+      }
 
-      return hash;
+      const result = await dynamicClient.wallets.sendBalance(params);
+      return result.hash;
     },
     [wallets],
   );

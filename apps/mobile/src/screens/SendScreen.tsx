@@ -6,13 +6,16 @@ import { AddressInput } from '../components/AddressInput';
 import { AmountInput } from '../components/AmountInput';
 import { ConfirmModal } from '../components/ConfirmModal';
 
+type TokenType = 'ETH' | 'ULNKm';
+
 interface SendScreenProps {
   evmBalance?: string;
   unlinkBalance?: string;
   senderAddress?: string;
   prefillAddress?: string;
-  onSendPublic?: (to: string, amount: string) => Promise<string>;
+  onSendPublic?: (to: string, amount: string, token: TokenType) => Promise<string>;
   onSendPrivate?: (to: string, amount: string) => Promise<string>;
+  onSendPrivateToEvm?: (to: string, amount: string) => Promise<string>;
 }
 
 type AddressType = 'evm' | 'unlink' | null;
@@ -25,9 +28,12 @@ export function SendScreen({
   prefillAddress = '',
   onSendPublic,
   onSendPrivate,
+  onSendPrivateToEvm,
 }: SendScreenProps) {
   const [address, setAddress] = useState(prefillAddress);
   const [amount, setAmount] = useState('');
+  const [selectedToken, setSelectedToken] = useState<TokenType>('ULNKm');
+  const [isPrivateMode, setIsPrivateMode] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [txStatus, setTxStatus] = useState<TxStatus>('idle');
   const [txHash, setTxHash] = useState<string | undefined>();
@@ -38,11 +44,12 @@ export function SendScreen({
     return null;
   }, [address]);
 
-  const mode = addressType === 'unlink' ? 'private' : 'public';
+  // unlink1... is always private; 0x... can be public or private
+  const mode = addressType === 'unlink' ? 'private' : (isPrivateMode ? 'private' : 'public');
 
   const currentBalance = useMemo(() => {
-    const raw = addressType === 'unlink' ? unlinkBalance : evmBalance;
-    return formatBalance(raw);
+    if (addressType === 'unlink') return formatBalance(unlinkBalance);
+    return formatBalance(evmBalance);
   }, [addressType, evmBalance, unlinkBalance]);
 
   const canSend = addressType !== null && parseFloat(amount) > 0;
@@ -58,10 +65,12 @@ export function SendScreen({
     setTxStatus('pending');
     try {
       let hash: string | undefined;
-      if (mode === 'private' && onSendPrivate) {
+      if (mode === 'private' && addressType === 'unlink' && onSendPrivate) {
         hash = await onSendPrivate(address, amount);
+      } else if (mode === 'private' && addressType === 'evm' && onSendPrivateToEvm) {
+        hash = await onSendPrivateToEvm(address, amount);
       } else if (mode === 'public' && onSendPublic) {
-        hash = await onSendPublic(address, amount);
+        hash = await onSendPublic(address, amount, selectedToken);
       }
       setTxHash(hash);
       setTxStatus('success');
@@ -107,11 +116,53 @@ export function SendScreen({
           addressType={addressType}
         />
 
+        {addressType === 'evm' && (
+          <View style={styles.tokenSelector}>
+            <Pressable
+              style={[styles.tokenOption, !isPrivateMode && styles.tokenOptionActive]}
+              onPress={() => setIsPrivateMode(false)}
+            >
+              <Text style={[styles.tokenOptionText, !isPrivateMode && styles.tokenOptionTextActive]}>
+                Public
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.tokenOption, isPrivateMode && styles.privacyOptionActive]}
+              onPress={() => { setIsPrivateMode(true); setSelectedToken('ULNKm'); }}
+            >
+              <Text style={[styles.tokenOptionText, isPrivateMode && styles.tokenOptionTextActive]}>
+                Private
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
+        {addressType !== 'unlink' && !isPrivateMode && (
+          <View style={styles.tokenSelector}>
+            <Pressable
+              style={[styles.tokenOption, selectedToken === 'ETH' && styles.tokenOptionActive]}
+              onPress={() => setSelectedToken('ETH')}
+            >
+              <Text style={[styles.tokenOptionText, selectedToken === 'ETH' && styles.tokenOptionTextActive]}>
+                ETH
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.tokenOption, selectedToken === 'ULNKm' && styles.tokenOptionActive]}
+              onPress={() => setSelectedToken('ULNKm')}
+            >
+              <Text style={[styles.tokenOptionText, selectedToken === 'ULNKm' && styles.tokenOptionTextActive]}>
+                ULNKm
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
         <AmountInput
           value={amount}
           onChange={setAmount}
           maxBalance={currentBalance}
-          token="ETH"
+          token={addressType === 'unlink' ? 'ULNKm' : selectedToken}
         />
 
         <Pressable
@@ -195,5 +246,32 @@ const styles = StyleSheet.create({
   connectText: {
     color: '#999999',
     fontSize: 16,
+  },
+  tokenSelector: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    backgroundColor: '#1A1A1A',
+    borderRadius: 12,
+    padding: 4,
+  },
+  tokenOption: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 10,
+  },
+  tokenOptionActive: {
+    backgroundColor: '#6366F1',
+  },
+  privacyOptionActive: {
+    backgroundColor: '#8B5CF6',
+  },
+  tokenOptionText: {
+    color: '#999999',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  tokenOptionTextActive: {
+    color: '#FFFFFF',
   },
 });

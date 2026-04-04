@@ -7,7 +7,8 @@ import { useWallet } from '../hooks/useWallet';
 import { useBalance } from '../hooks/useBalance';
 import { useSendTransaction } from '../hooks/useSendTransaction';
 import { useTransactions } from '../hooks/useTransactions';
-import { sendPrivate } from '../services/api';
+import { useUnlink } from '../hooks/useUnlink';
+import { parseUnits } from 'viem';
 
 import { AuthScreen } from '../screens/AuthScreen';
 import { BalanceScreen } from '../screens/BalanceScreen';
@@ -18,9 +19,9 @@ import { HistoryScreen } from '../screens/HistoryScreen';
 // ---------- Connected screen wrappers ----------
 
 function ConnectedBalanceScreen() {
-  const { address } = useWallet();
-  const { evmBalance, unlinkAddress, unlinkBalance, isLoading, refetch } =
-    useBalance(address);
+  const { address, logout } = useWallet();
+  const { evmBalance, isLoading, refetch } = useBalance(address);
+  const { unlinkAddress, unlinkBalance, refreshBalance } = useUnlink();
   const navigation = useNavigation<any>();
 
   const onNavigateSend = useCallback(() => {
@@ -31,6 +32,10 @@ function ConnectedBalanceScreen() {
     navigation.navigate('Receive');
   }, [navigation]);
 
+  const onRefresh = useCallback(async () => {
+    await Promise.all([refetch(), refreshBalance()]);
+  }, [refetch, refreshBalance]);
+
   return (
     <BalanceScreen
       evmAddress={address ?? undefined}
@@ -38,16 +43,18 @@ function ConnectedBalanceScreen() {
       unlinkAddress={unlinkAddress}
       unlinkBalance={unlinkBalance}
       isLoading={isLoading}
-      onRefresh={refetch}
+      onRefresh={onRefresh}
       onNavigateSend={onNavigateSend}
       onNavigateReceive={onNavigateReceive}
+      onLogout={logout}
     />
   );
 }
 
 function ConnectedSendScreen() {
   const { address } = useWallet();
-  const { evmBalance, unlinkBalance, unlinkAddress } = useBalance(address);
+  const { evmBalance } = useBalance(address);
+  const { unlinkBalance, transfer, privateSendToEvm } = useUnlink();
   const { sendPublic } = useSendTransaction();
   const { addTransaction } = useTransactions();
 
@@ -58,7 +65,7 @@ function ConnectedSendScreen() {
         type: 'send',
         mode,
         amount,
-        token: 'ETH',
+        token: 'ULNKm',
         counterparty: to,
         txHash: txHash || undefined,
         timestamp: Date.now(),
@@ -69,9 +76,9 @@ function ConnectedSendScreen() {
   );
 
   const wrappedSendPublic = useCallback(
-    async (to: string, amount: string): Promise<string> => {
+    async (to: string, amount: string, token: 'ETH' | 'ULNKm' = 'ETH'): Promise<string> => {
       if (!sendPublic) throw new Error('Send not available');
-      const hash = await sendPublic(to, amount);
+      const hash = await sendPublic(to, amount, token);
       recordTx(to, amount, 'public', hash);
       return hash;
     },
@@ -80,21 +87,22 @@ function ConnectedSendScreen() {
 
   const wrappedSendPrivate = useCallback(
     async (to: string, amount: string): Promise<string> => {
-      if (!address) throw new Error('No wallet connected');
-      const res = await sendPrivate({
-        senderWalletAddress: address,
-        recipientUnlinkAddress: to,
-        amount,
-        token: 'ETH',
-      });
-      if (!res.success) {
-        throw new Error(res.error ?? 'Private send failed');
-      }
-      const hash = res.txHash ?? '';
-      recordTx(to, amount, 'private', hash);
-      return hash;
+      const amountBigInt = parseUnits(amount, 18);
+      const txId = await transfer(to, amountBigInt);
+      recordTx(to, amount, 'private', txId);
+      return txId;
     },
-    [address, recordTx],
+    [transfer, recordTx],
+  );
+
+  const wrappedSendPrivateToEvm = useCallback(
+    async (to: string, amount: string): Promise<string> => {
+      const amountBigInt = parseUnits(amount, 18);
+      const txId = await privateSendToEvm(to, amountBigInt);
+      recordTx(to, amount, 'private', txId);
+      return txId;
+    },
+    [privateSendToEvm, recordTx],
   );
 
   return (
@@ -104,13 +112,14 @@ function ConnectedSendScreen() {
       senderAddress={address ?? undefined}
       onSendPublic={wrappedSendPublic}
       onSendPrivate={wrappedSendPrivate}
+      onSendPrivateToEvm={wrappedSendPrivateToEvm}
     />
   );
 }
 
 function ConnectedReceiveScreen() {
   const { address } = useWallet();
-  const { unlinkAddress } = useBalance(address);
+  const { unlinkAddress } = useUnlink();
 
   return (
     <ReceiveScreen
