@@ -186,4 +186,79 @@ export async function withdrawToEvm(
   }
 }
 
+// ── Gift wallet operations ───────────────────────────────────────────
+
+/**
+ * Generate a throwaway Unlink wallet for a gift link.
+ * The mnemonic is stored in the DB (for refunds) and encoded in the QR.
+ */
+export async function generateGiftWallet(): Promise<{ mnemonic: string; unlinkAddress: string }> {
+  try {
+    const mnemonic = generateMnemonic(wordlist);
+    const client = makeUnlinkClient(mnemonic);
+
+    const unlinkAddress = await client.getAddress();
+    await client.ensureRegistered();
+
+    logger.info(`Generated gift wallet: ${unlinkAddress}`);
+    return { mnemonic, unlinkAddress };
+  } catch (err) {
+    logger.error('generateGiftWallet failed', err);
+    throw err;
+  }
+}
+
+/**
+ * Transfer funds from a gift wallet to a recipient.
+ * Used for refunds (cancel flow): gift wallet → sender's Unlink address.
+ */
+export async function transferFromGiftWallet(
+  giftMnemonic: string,
+  recipientUnlinkAddress: string,
+  amount: string,
+): Promise<string> {
+  try {
+    const client = makeUnlinkClient(giftMnemonic);
+    await client.ensureRegistered();
+
+    logger.info(`Gift wallet transfer: to=${recipientUnlinkAddress} amount=${amount}`);
+
+    const result = await client.transfer({
+      recipientAddress: recipientUnlinkAddress,
+      token: TOKEN,
+      amount,
+    });
+
+    logger.info(`Gift transfer submitted: txId=${result.txId}`);
+
+    const confirmed = await client.pollTransactionStatus(result.txId);
+    logger.info(`Gift transfer status: ${confirmed.status}`);
+
+    return result.txId;
+  } catch (err) {
+    logger.error(`transferFromGiftWallet failed: to=${recipientUnlinkAddress}`, err);
+    throw err;
+  }
+}
+
+/**
+ * Check the balance of a gift wallet.
+ */
+export async function getGiftWalletBalance(giftMnemonic: string): Promise<string> {
+  try {
+    const client = makeUnlinkClient(giftMnemonic);
+    const balances = await client.getBalances({ token: TOKEN });
+
+    const entry = balances.balances?.find(
+      (b: { token: string }) => b.token.toLowerCase() === TOKEN.toLowerCase()
+    );
+
+    const raw = BigInt(entry?.amount ?? '0');
+    return formatUnits(raw, 18);
+  } catch (err) {
+    logger.error('getGiftWalletBalance failed', err);
+    throw err;
+  }
+}
+
 export { TOKEN, ENGINE_URL };
