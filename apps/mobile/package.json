@@ -19,7 +19,11 @@
     "@dynamic-labs/viem-extension": "^4",
     "@dynamic-labs/react-hooks": "^4",
     "react-native-get-random-values": "^1",
-    "@walletconnect/react-native-compat": "^2"
+    "@walletconnect/react-native-compat": "^2",
+    "@react-navigation/native": "^7",
+    "@react-navigation/bottom-tabs": "^7",
+    "react-native-screens": "^4",
+    "react-native-safe-area-context": "^5"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",

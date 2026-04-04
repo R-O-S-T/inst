@@ -6,8 +6,17 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts"
   },
-  "dependencies": {},
+  "dependencies": {
+    "express": "^4.21.0",
+    "cors": "^2.8.5",
+    "helmet": "^8.0.0",
+    "dotenv": "^16.4.7",
+    "sql.js": "^1.11.0",
+    "tsx": "^4.19.0"
+  },
   "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/cors": "^2.8.17",
     "typescript": "~5.9.2"
   },
   "private": true
