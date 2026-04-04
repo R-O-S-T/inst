@@ -21,6 +21,7 @@ interface BalanceScreenProps {
   onRefresh?: () => void;
   onNavigateSend?: () => void;
   onNavigateReceive?: () => void;
+  onLogout?: () => void;
 }
 
 /** Pulsing skeleton placeholder shown while first balance load is in progress */
@@ -61,6 +62,7 @@ export function BalanceScreen({
   onRefresh,
   onNavigateSend,
   onNavigateReceive,
+  onLogout,
 }: BalanceScreenProps) {
   // Consider it a "first load" when loading with no real balance data yet
   const isFirstLoad = isLoading && evmBalance === '0' && unlinkBalance === '0';
@@ -95,7 +97,14 @@ export function BalanceScreen({
           />
         }
       >
-        <Text style={styles.heading}>Wallet</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.heading}>Wallet</Text>
+          {onLogout && (
+            <TouchableOpacity onPress={onLogout} activeOpacity={0.7} style={styles.logoutButton}>
+              <Text style={styles.logoutText}>Logout</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         {/* Wallet address header with copy */}
         <TouchableOpacity
@@ -136,8 +145,9 @@ export function BalanceScreen({
             <BalanceCard
               label="Private Balance"
               balance={unlinkBalance}
-              token="ETH"
+              token="ULNKm"
               isLoading={isLoading}
+              formatted
             />
           )}
         </View>
@@ -189,11 +199,27 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 32,
   },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   heading: {
     color: '#FFFFFF',
     fontSize: 28,
     fontWeight: '700',
-    marginBottom: 8,
+  },
+  logoutButton: {
+    backgroundColor: '#2A2A2A',
+    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+  },
+  logoutText: {
+    color: '#999999',
+    fontSize: 13,
+    fontWeight: '600',
   },
   addressRow: {
     flexDirection: 'row',

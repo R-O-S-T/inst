@@ -7,9 +7,11 @@ interface BalanceCardProps {
   balance: string;
   token: string;
   isLoading: boolean;
+  /** If true, balance is already human-readable — skip wei conversion */
+  formatted?: boolean;
 }
 
-export function BalanceCard({ label, balance, token, isLoading }: BalanceCardProps) {
+export function BalanceCard({ label, balance, token, isLoading, formatted = false }: BalanceCardProps) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -35,7 +37,7 @@ export function BalanceCard({ label, balance, token, isLoading }: BalanceCardPro
     pulseAnim.setValue(1);
   }, [isLoading, pulseAnim]);
 
-  const displayBalance = isLoading ? '---' : formatBalance(balance);
+  const displayBalance = isLoading ? '---' : (formatted ? balance : formatBalance(balance));
 
   return (
     <View style={styles.card}>
