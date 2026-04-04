@@ -1,27 +1,19 @@
 import React, { useCallback } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { Text, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 
 import { useWallet } from '../hooks/useWallet';
 import { useBalance } from '../hooks/useBalance';
 import { useSendTransaction } from '../hooks/useSendTransaction';
+import { useTransactions } from '../hooks/useTransactions';
 import { sendPrivate } from '../services/api';
 
 import { AuthScreen } from '../screens/AuthScreen';
 import { BalanceScreen } from '../screens/BalanceScreen';
 import { SendScreen } from '../screens/SendScreen';
 import { ReceiveScreen } from '../screens/ReceiveScreen';
-
-// ---------- History placeholder ----------
-
-function HistoryScreen() {
-  return (
-    <View style={styles.screen}>
-      <Text style={styles.title}>Coming soon</Text>
-    </View>
-  );
-}
+import { HistoryScreen } from '../screens/HistoryScreen';
 
 // ---------- Connected screen wrappers ----------
 
@@ -57,8 +49,36 @@ function ConnectedSendScreen() {
   const { address } = useWallet();
   const { evmBalance, unlinkBalance, unlinkAddress } = useBalance(address);
   const { sendPublic } = useSendTransaction();
+  const { addTransaction } = useTransactions();
 
-  const onSendPrivate = useCallback(
+  const recordTx = useCallback(
+    (to: string, amount: string, mode: 'public' | 'private', txHash: string) => {
+      addTransaction({
+        id: txHash || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: 'send',
+        mode,
+        amount,
+        token: 'ETH',
+        counterparty: to,
+        txHash: txHash || undefined,
+        timestamp: Date.now(),
+        status: 'confirmed',
+      });
+    },
+    [addTransaction],
+  );
+
+  const wrappedSendPublic = useCallback(
+    async (to: string, amount: string): Promise<string> => {
+      if (!sendPublic) throw new Error('Send not available');
+      const hash = await sendPublic(to, amount);
+      recordTx(to, amount, 'public', hash);
+      return hash;
+    },
+    [sendPublic, recordTx],
+  );
+
+  const wrappedSendPrivate = useCallback(
     async (to: string, amount: string): Promise<string> => {
       if (!address) throw new Error('No wallet connected');
       const res = await sendPrivate({
@@ -70,9 +90,11 @@ function ConnectedSendScreen() {
       if (!res.success) {
         throw new Error(res.error ?? 'Private send failed');
       }
-      return res.txHash ?? '';
+      const hash = res.txHash ?? '';
+      recordTx(to, amount, 'private', hash);
+      return hash;
     },
-    [address],
+    [address, recordTx],
   );
 
   return (
@@ -80,8 +102,8 @@ function ConnectedSendScreen() {
       evmBalance={evmBalance}
       unlinkBalance={unlinkBalance}
       senderAddress={address ?? undefined}
-      onSendPublic={sendPublic}
-      onSendPrivate={onSendPrivate}
+      onSendPublic={wrappedSendPublic}
+      onSendPrivate={wrappedSendPrivate}
     />
   );
 }
@@ -96,6 +118,24 @@ function ConnectedReceiveScreen() {
       unlinkAddress={unlinkAddress || undefined}
     />
   );
+}
+
+function ConnectedHistoryScreen() {
+  const { address } = useWallet();
+  const { transactions } = useTransactions();
+
+  return (
+    <HistoryScreen
+      walletAddress={address ?? undefined}
+      transactions={transactions}
+    />
+  );
+}
+
+// ---------- Tab icon helper ----------
+
+function TabIcon({ label, color }: { label: string; color: string }) {
+  return <Text style={{ color, fontSize: 20 }}>{label}</Text>;
 }
 
 // ---------- Navigator ----------
@@ -122,10 +162,34 @@ export default function MainNavigator() {
         tabBarInactiveTintColor: '#999999',
       }}
     >
-      <Tab.Screen name="Balance" component={ConnectedBalanceScreen} />
-      <Tab.Screen name="Send" component={ConnectedSendScreen} />
-      <Tab.Screen name="Receive" component={ConnectedReceiveScreen} />
-      <Tab.Screen name="History" component={HistoryScreen} />
+      <Tab.Screen
+        name="Balance"
+        component={ConnectedBalanceScreen}
+        options={{
+          tabBarIcon: ({ color }) => <TabIcon label="◉" color={color} />,
+        }}
+      />
+      <Tab.Screen
+        name="Send"
+        component={ConnectedSendScreen}
+        options={{
+          tabBarIcon: ({ color }) => <TabIcon label="↑" color={color} />,
+        }}
+      />
+      <Tab.Screen
+        name="Receive"
+        component={ConnectedReceiveScreen}
+        options={{
+          tabBarIcon: ({ color }) => <TabIcon label="↓" color={color} />,
+        }}
+      />
+      <Tab.Screen
+        name="History"
+        component={ConnectedHistoryScreen}
+        options={{
+          tabBarIcon: ({ color }) => <TabIcon label="☰" color={color} />,
+        }}
+      />
     </Tab.Navigator>
   );
 }
