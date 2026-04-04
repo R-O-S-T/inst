@@ -1,25 +1,65 @@
+import {
+  createUnlink,
+  unlinkAccount,
+  unlinkEvm,
+} from '@unlink-xyz/sdk';
+import {
+  createPublicClient,
+  createWalletClient,
+  http,
+  formatUnits,
+} from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { baseSepolia } from 'viem/chains';
+import { generateMnemonic } from '@scure/bip39';
+import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { logger } from '../utils/logger.js';
 
-// TODO: Replace stubs with real @unlink-xyz/sdk calls once the package is installed.
-// See /tmp/deps-needed.txt for the required dependency.
+// ── Constants ─────────────────────────────────────────────────────────
+const ENGINE_URL = 'https://staging-api.unlink.xyz';
+const TOKEN = '0x7501de8ea37a21e20e6e65947d2ecab0e9f061a7'; // ULNKm on Base Sepolia
+
+// ── Shared EVM infrastructure ─────────────────────────────────────────
+function getEvmProvider() {
+  const privateKey = process.env.EVM_PRIVATE_KEY as `0x${string}`;
+  if (!privateKey) throw new Error('EVM_PRIVATE_KEY not set');
+
+  const transport = http(process.env.RPC_URL || 'https://sepolia.base.org');
+  const evmAccount = privateKeyToAccount(privateKey);
+
+  const publicClient = createPublicClient({ chain: baseSepolia, transport });
+  const walletClient = createWalletClient({ account: evmAccount, chain: baseSepolia, transport });
+
+  return { publicClient, walletClient, evmAccount };
+}
+
+function makeUnlinkClient(mnemonic: string) {
+  const { publicClient, walletClient } = getEvmProvider();
+
+  return createUnlink({
+    engineUrl: ENGINE_URL,
+    apiKey: process.env.UNLINK_API_KEY!,
+    account: unlinkAccount.fromMnemonic({ mnemonic }),
+    evm: unlinkEvm.fromViem({ walletClient, publicClient }),
+  });
+}
+
+// ── Exported functions ────────────────────────────────────────────────
 
 /**
- * Generate a new Unlink wallet mnemonic and derive the corresponding Unlink address.
+ * Generate a new mnemonic and derive the Unlink address.
+ * Also registers the user with the Unlink backend.
  */
 export async function generateUserMnemonic(): Promise<{ mnemonic: string; unlinkAddress: string }> {
   try {
-    // TODO: Use Unlink SDK to generate a real mnemonic + address, e.g.:
-    //   import { Wallet } from '@unlink-xyz/sdk';
-    //   const wallet = Wallet.generate();
-    //   return { mnemonic: wallet.mnemonic, unlinkAddress: wallet.address };
+    const mnemonic = generateMnemonic(wordlist);
+    const client = makeUnlinkClient(mnemonic);
 
-    logger.warn('generateUserMnemonic: Using stub — install @unlink-xyz/sdk for real implementation');
+    const unlinkAddress = await client.getAddress();
+    await client.ensureRegistered();
 
-    // Placeholder values for development
-    const fakeMnemonic = 'test test test test test test test test test test test junk';
-    const fakeAddress = `unlink1${Date.now().toString(36)}stub`;
-
-    return { mnemonic: fakeMnemonic, unlinkAddress: fakeAddress };
+    logger.info(`Generated Unlink wallet: ${unlinkAddress}`);
+    return { mnemonic, unlinkAddress };
   } catch (err) {
     logger.error('generateUserMnemonic failed', err);
     throw err;
@@ -27,52 +67,123 @@ export async function generateUserMnemonic(): Promise<{ mnemonic: string; unlink
 }
 
 /**
- * Transfer tokens from the platform/escrow Unlink wallet to a user's Unlink address.
- * Returns the transaction hash.
+ * Private transfer from a sender's Unlink pool to a recipient Unlink address.
+ * Sender, recipient, amount, and token are ALL private on-chain.
  */
 export async function transferToUser(
+  senderMnemonic: string,
   recipientUnlinkAddress: string,
   amount: string,
-  token: string,
 ): Promise<string> {
   try {
-    // TODO: Use Unlink SDK to execute the transfer, e.g.:
-    //   import { Wallet, Transfer } from '@unlink-xyz/sdk';
-    //   const escrowWallet = Wallet.fromMnemonic(process.env.UNLINK_ESCROW_MNEMONIC!);
-    //   const tx = await Transfer.send({
-    //     from: escrowWallet,
-    //     to: recipientUnlinkAddress,
-    //     amount,
-    //     token,
-    //   });
-    //   return tx.hash;
+    const client = makeUnlinkClient(senderMnemonic);
+    await client.ensureRegistered();
 
-    logger.warn('transferToUser: Using stub — install @unlink-xyz/sdk for real implementation');
-    logger.info(`transferToUser stub: to=${recipientUnlinkAddress} amount=${amount} token=${token}`);
+    logger.info(`Private transfer: to=${recipientUnlinkAddress} amount=${amount}`);
 
-    return `0xstub_tx_${Date.now().toString(16)}`;
+    const result = await client.transfer({
+      recipientAddress: recipientUnlinkAddress,
+      token: TOKEN,
+      amount,
+    });
+
+    logger.info(`Transfer submitted: txId=${result.txId}`);
+
+    const confirmed = await client.pollTransactionStatus(result.txId);
+    logger.info(`Transfer status: ${confirmed.status}`);
+
+    return result.txId;
   } catch (err) {
-    logger.error(`transferToUser failed: to=${recipientUnlinkAddress} amount=${amount} token=${token}`, err);
+    logger.error(`transferToUser failed: to=${recipientUnlinkAddress}`, err);
     throw err;
   }
 }
 
 /**
- * Query the balance of an Unlink address. Returns the balance as a string.
+ * Query the Unlink pool balance for a given mnemonic.
+ * Returns formatted balance string.
  */
-export async function getBalance(unlinkAddress: string): Promise<string> {
+export async function getBalance(mnemonic: string): Promise<string> {
   try {
-    // TODO: Use Unlink SDK to query the real balance, e.g.:
-    //   import { Query } from '@unlink-xyz/sdk';
-    //   const balance = await Query.getBalance(unlinkAddress);
-    //   return balance.toString();
+    const client = makeUnlinkClient(mnemonic);
+    const balances = await client.getBalances({ token: TOKEN });
 
-    logger.warn('getBalance: Using stub — install @unlink-xyz/sdk for real implementation');
-    logger.debug(`getBalance stub: address=${unlinkAddress}`);
+    const entry = balances.balances?.find(
+      (b: { token: string }) => b.token.toLowerCase() === TOKEN.toLowerCase()
+    );
 
-    return '0';
+    const raw = BigInt(entry?.amount ?? '0');
+    return formatUnits(raw, 18);
   } catch (err) {
-    logger.error(`getBalance failed: address=${unlinkAddress}`, err);
+    logger.error('getBalance failed', err);
     throw err;
   }
 }
+
+/**
+ * Deposit ERC-20 tokens from the EVM wallet into a user's Unlink pool.
+ */
+export async function depositToPool(
+  mnemonic: string,
+  amount: string,
+): Promise<string> {
+  try {
+    const client = makeUnlinkClient(mnemonic);
+    const { publicClient } = getEvmProvider();
+
+    await client.ensureRegistered();
+
+    // Ensure ERC-20 approval for Unlink pool
+    const approval = await client.ensureErc20Approval({ token: TOKEN, amount });
+    if (approval.status === 'submitted') {
+      logger.info(`ERC-20 approval tx: ${approval.txHash}`);
+      await publicClient.waitForTransactionReceipt({
+        hash: approval.txHash as `0x${string}`,
+      });
+    }
+
+    const result = await client.deposit({ token: TOKEN, amount });
+    logger.info(`Deposit submitted: txId=${result.txId}`);
+
+    const confirmed = await client.pollTransactionStatus(result.txId);
+    logger.info(`Deposit status: ${confirmed.status}`);
+
+    return result.txId;
+  } catch (err) {
+    logger.error('depositToPool failed', err);
+    throw err;
+  }
+}
+
+/**
+ * Withdraw from Unlink pool to a public EVM address.
+ * Sender is PRIVATE, recipient and amount are PUBLIC.
+ */
+export async function withdrawToEvm(
+  mnemonic: string,
+  recipientEvmAddress: string,
+  amount: string,
+): Promise<string> {
+  try {
+    const client = makeUnlinkClient(mnemonic);
+    await client.ensureRegistered();
+
+    const result = await client.withdraw({
+      recipientEvmAddress,
+      token: TOKEN,
+      amount,
+    });
+
+    logger.info(`Withdraw submitted: txId=${result.txId}`);
+
+    const confirmed = await client.pollTransactionStatus(result.txId);
+    logger.info(`Withdraw status: ${confirmed.status}`);
+
+    return result.txId;
+  } catch (err) {
+    logger.error(`withdrawToEvm failed: to=${recipientEvmAddress}`, err);
+    throw err;
+  }
+}
+
+export { TOKEN, ENGINE_URL };

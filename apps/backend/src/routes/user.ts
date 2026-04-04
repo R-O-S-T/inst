@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import type { UserBalanceResponse } from '@instant/shared/types.js';
 import { getUserByEvmAddress } from '../services/db.js';
 import { getBalance } from '../services/unlink.js';
 import { logger } from '../utils/logger.js';
@@ -27,7 +26,6 @@ async function fetchEvmBalance(address: string): Promise<string> {
     throw new Error(`RPC error: ${data.error.message}`);
   }
 
-  // result is a hex string like "0x1234" — return as-is (let client format)
   return data.result ?? '0x0';
 }
 
@@ -50,24 +48,22 @@ userRouter.get('/user/:walletAddress', async (req: Request, res: Response) => {
       logger.warn(`Failed to fetch EVM balance for ${user.evm_address}`, err);
     }
 
-    // Fetch Unlink balance if user has an unlink address
+    // Fetch Unlink pool balance if user has a mnemonic
     let unlinkBalance = '0';
-    if (user.unlink_address) {
+    if (user.unlink_mnemonic) {
       try {
-        unlinkBalance = await getBalance(user.unlink_address);
+        unlinkBalance = await getBalance(user.unlink_mnemonic);
       } catch (err) {
         logger.warn(`Failed to fetch Unlink balance for ${user.unlink_address}`, err);
       }
     }
 
-    const response: UserBalanceResponse = {
+    res.json({
       evmAddress: user.evm_address,
       evmBalance,
       unlinkAddress: user.unlink_address ?? '',
       unlinkBalance,
-    };
-
-    res.json(response);
+    });
   } catch (err) {
     logger.error('user route failed', err);
     res.status(500).json({ error: 'Internal server error' });
