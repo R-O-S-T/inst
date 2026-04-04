@@ -4,9 +4,7 @@ import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 // TODO: Install react-native-qrcode-svg and react-native-svg, then uncomment:
 // import QRCode from 'react-native-qrcode-svg';
 
-// TODO: Install expo-clipboard, then uncomment:
-// import * as Clipboard from 'expo-clipboard';
-import { Clipboard as RNClipboard } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 
 interface QRCodeDisplayProps {
   address: string;
@@ -15,11 +13,8 @@ interface QRCodeDisplayProps {
 }
 
 export function QRCodeDisplay({ address, label, size = 200 }: QRCodeDisplayProps) {
-  const handleCopy = useCallback(() => {
-    // TODO: Replace with Clipboard.setStringAsync(address) from expo-clipboard
-    if (RNClipboard?.setString) {
-      RNClipboard.setString(address);
-    }
+  const handleCopy = useCallback(async () => {
+    await Clipboard.setStringAsync(address);
     Alert.alert('Copied', 'Address copied to clipboard');
   }, [address]);
 

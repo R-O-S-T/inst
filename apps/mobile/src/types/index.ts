@@ -5,11 +5,11 @@ export type {
   UserCreateWebhookPayload,
   Transaction,
   WalletState,
-} from '../../../packages/shared/types';
+} from '../../../../packages/shared/types';
 
 export {
   CHAIN_CONFIG,
   UNLINK_CONTRACT,
   isUnlinkAddress,
   isEvmAddress,
-} from '../../../packages/shared/types';
+} from '../../../../packages/shared/types';

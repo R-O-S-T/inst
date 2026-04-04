@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import Clipboard from '@react-native-clipboard/clipboard';
+import * as Clipboard from 'expo-clipboard';
 
 interface AddressInputProps {
   value: string;
@@ -10,7 +10,7 @@ interface AddressInputProps {
 
 export function AddressInput({ value, onChange, addressType }: AddressInputProps) {
   const handlePaste = async () => {
-    const clip = await Clipboard.getString();
+    const clip = await Clipboard.getStringAsync();
     if (clip) {
       onChange(clip);
     }
