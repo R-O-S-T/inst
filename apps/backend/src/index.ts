@@ -3,7 +3,6 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { webhookRouter } from './routes/webhook.js';
-import { sendPrivateRouter } from './routes/sendPrivate.js';
 import { userRouter } from './routes/user.js';
 import { giftRouter } from './routes/gift.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -28,7 +27,6 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: Date.now() });
 });
 
-app.use('/api', sendPrivateRouter);
 app.use('/api', userRouter);
 app.use('/api', giftRouter);
 
