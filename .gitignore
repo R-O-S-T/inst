@@ -3,6 +3,7 @@ node_modules/
 dist/
 *.tsbuildinfo
 .env
+secrets.ts
 android/
 ios/
 data/
