@@ -80,6 +80,16 @@ export function SendScreen({
     setTxHash(undefined);
   };
 
+  if (!senderAddress) {
+    return (
+      <View style={styles.screen}>
+        <View style={styles.centered}>
+          <Text style={styles.connectText}>Connect wallet to send</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.screen}>
       <ScrollView
@@ -89,9 +99,7 @@ export function SendScreen({
       >
         <Text style={styles.heading}>Send</Text>
 
-        {senderAddress && (
-          <Text style={styles.senderLabel}>From: {senderAddress}</Text>
-        )}
+        <Text style={styles.senderLabel}>From: {senderAddress}</Text>
 
         <AddressInput
           value={address}
@@ -107,7 +115,11 @@ export function SendScreen({
         />
 
         <Pressable
-          style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
+          style={({ pressed }) => [
+            styles.sendButton,
+            !canSend && styles.sendButtonDisabled,
+            pressed && canSend && styles.sendButtonPressed,
+          ]}
           onPress={handleSendPress}
           disabled={!canSend}
         >
@@ -164,6 +176,9 @@ const styles = StyleSheet.create({
   sendButtonDisabled: {
     backgroundColor: '#2A2A2A',
   },
+  sendButtonPressed: {
+    opacity: 0.7,
+  },
   sendButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
@@ -171,5 +186,14 @@ const styles = StyleSheet.create({
   },
   sendButtonTextDisabled: {
     color: '#666666',
+  },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  connectText: {
+    color: '#999999',
+    fontSize: 16,
   },
 });

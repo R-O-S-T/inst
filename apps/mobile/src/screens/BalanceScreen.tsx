@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
+  Animated,
+  Clipboard,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -21,6 +23,35 @@ interface BalanceScreenProps {
   onNavigateReceive?: () => void;
 }
 
+/** Pulsing skeleton placeholder shown while first balance load is in progress */
+function SkeletonBlock({ width, height }: { width: number | string; height: number }) {
+  const anim = useRef(new Animated.Value(0.25)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 0.6, duration: 700, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0.25, duration: 700, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [anim]);
+
+  return (
+    <Animated.View
+      style={{
+        width: width as any,
+        height,
+        borderRadius: 8,
+        backgroundColor: '#2A2A2A',
+        opacity: anim,
+        marginBottom: 12,
+      }}
+    />
+  );
+}
+
 export function BalanceScreen({
   evmAddress,
   evmBalance = '0',
@@ -31,6 +62,25 @@ export function BalanceScreen({
   onNavigateSend,
   onNavigateReceive,
 }: BalanceScreenProps) {
+  // Consider it a "first load" when loading with no real balance data yet
+  const isFirstLoad = isLoading && evmBalance === '0' && unlinkBalance === '0';
+
+  const handleCopyAddress = () => {
+    if (evmAddress) {
+      Clipboard.setString(evmAddress);
+    }
+  };
+
+  if (!evmAddress) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.centered}>
+          <Text style={styles.connectText}>Connect wallet to view balances</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -47,28 +97,49 @@ export function BalanceScreen({
       >
         <Text style={styles.heading}>Wallet</Text>
 
+        {/* Wallet address header with copy */}
+        <TouchableOpacity
+          onPress={handleCopyAddress}
+          activeOpacity={0.7}
+          style={styles.addressRow}
+        >
+          <Text style={styles.addressText}>{formatAddress(evmAddress)}</Text>
+          <Text style={styles.copyHint}>Tap to copy</Text>
+        </TouchableOpacity>
+
         <View style={styles.section}>
-          {evmAddress ? (
-            <Text style={styles.addressLabel}>{formatAddress(evmAddress)}</Text>
-          ) : null}
-          <BalanceCard
-            label="Public Balance"
-            balance={evmBalance}
-            token="ETH"
-            isLoading={isLoading}
-          />
+          {isFirstLoad ? (
+            <View style={styles.skeletonCard}>
+              <SkeletonBlock width={120} height={14} />
+              <SkeletonBlock width={180} height={32} />
+            </View>
+          ) : (
+            <BalanceCard
+              label="Public Balance"
+              balance={evmBalance}
+              token="ETH"
+              isLoading={isLoading}
+            />
+          )}
         </View>
 
         <View style={styles.section}>
           {unlinkAddress ? (
             <Text style={styles.addressLabel}>{formatAddress(unlinkAddress)}</Text>
           ) : null}
-          <BalanceCard
-            label="Private Balance"
-            balance={unlinkBalance}
-            token="ETH"
-            isLoading={isLoading}
-          />
+          {isFirstLoad ? (
+            <View style={styles.skeletonCard}>
+              <SkeletonBlock width={120} height={14} />
+              <SkeletonBlock width={180} height={32} />
+            </View>
+          ) : (
+            <BalanceCard
+              label="Private Balance"
+              balance={unlinkBalance}
+              token="ETH"
+              isLoading={isLoading}
+            />
+          )}
         </View>
       </ScrollView>
 
@@ -102,6 +173,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0D0D0D',
   },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  connectText: {
+    color: '#999999',
+    fontSize: 16,
+  },
   scrollView: {
     flex: 1,
   },
@@ -113,7 +193,22 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 28,
     fontWeight: '700',
-    marginBottom: 24,
+    marginBottom: 8,
+  },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  addressText: {
+    color: '#999999',
+    fontSize: 14,
+    fontFamily: 'monospace',
+  },
+  copyHint: {
+    color: '#6366F1',
+    fontSize: 12,
+    marginLeft: 8,
   },
   section: {
     marginBottom: 8,
@@ -122,6 +217,14 @@ const styles = StyleSheet.create({
     color: '#999999',
     fontSize: 13,
     marginBottom: 6,
+  },
+  skeletonCard: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    padding: 20,
+    marginBottom: 12,
   },
   actions: {
     flexDirection: 'row',

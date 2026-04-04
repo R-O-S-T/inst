@@ -28,7 +28,7 @@ export function AuthScreen() {
           {isLoading ? (
             <ActivityIndicator size="large" color="#6366F1" />
           ) : (
-            <TouchableOpacity style={styles.button} onPress={handleSignIn}>
+            <TouchableOpacity style={styles.button} onPress={handleSignIn} activeOpacity={0.7}>
               <Text style={styles.buttonText}>Sign In</Text>
             </TouchableOpacity>
           )}

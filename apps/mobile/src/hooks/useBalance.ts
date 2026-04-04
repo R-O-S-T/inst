@@ -1,7 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { fetchUserBalance } from '../services/api';
+import { createPublicClient, http, formatEther } from 'viem';
+import { baseSepolia } from 'viem/chains';
 
 const POLL_INTERVAL_MS = 15_000;
+
+const publicClient = createPublicClient({
+  chain: baseSepolia,
+  transport: http(),
+});
 
 export function useBalance(walletAddress: string | null) {
   const [evmBalance, setEvmBalance] = useState<string>('0');
@@ -23,10 +29,14 @@ export function useBalance(walletAddress: string | null) {
     setError(null);
 
     try {
-      const data = await fetchUserBalance(addr);
-      setEvmBalance(data.evmBalance);
-      setUnlinkBalance(data.unlinkBalance);
-      setUnlinkAddress(data.unlinkAddress);
+      const rawBalance = await publicClient.getBalance({
+        address: addr as `0x${string}`,
+      });
+      setEvmBalance(formatEther(rawBalance));
+
+      // Unlink SDK is stubbed -- return empty/null for now
+      setUnlinkBalance('0');
+      setUnlinkAddress('');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to fetch balance');
     } finally {
