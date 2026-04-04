@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import { webhookRouter } from './routes/webhook.js';
 import { sendPrivateRouter } from './routes/sendPrivate.js';
 import { userRouter } from './routes/user.js';
+import { giftRouter } from './routes/gift.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { logger } from './utils/logger.js';
 import { initDb } from './services/db.js';
@@ -29,18 +30,21 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api', sendPrivateRouter);
 app.use('/api', userRouter);
+app.use('/api', giftRouter);
 
 // --------------- Error handling ---------------
 app.use(errorHandler);
 
 // --------------- Start ---------------
-initDb().then(() => {
-  app.listen(PORT, () => {
-    logger.info(`Backend listening on port ${PORT}`);
+if (!process.env.TEST) {
+  initDb().then(() => {
+    app.listen(PORT, () => {
+      logger.info(`Backend listening on port ${PORT}`);
+    });
+  }).catch((err) => {
+    logger.error('Failed to initialize database', err);
+    process.exit(1);
   });
-}).catch((err) => {
-  logger.error('Failed to initialize database', err);
-  process.exit(1);
-});
+}
 
 export default app;
