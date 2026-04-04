@@ -15,4 +15,9 @@ config.resolver.nodeModulesPaths = [
   path.resolve(monorepoRoot, 'node_modules'),
 ];
 
+// Polyfill Node.js built-ins that the Unlink SDK references
+config.resolver.extraNodeModules = {
+  module: path.resolve(projectRoot, 'shims/empty.js'),
+};
+
 module.exports = config;

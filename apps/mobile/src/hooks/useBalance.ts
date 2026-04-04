@@ -9,15 +9,17 @@ const publicClient = createPublicClient({
   transport: http(),
 });
 
+/**
+ * Fetches on-chain EVM balance for the given wallet address.
+ *
+ * Unlink balance and address are now managed by `useUnlink` and passed
+ * through separately by the navigator; this hook no longer stubs them.
+ */
 export function useBalance(walletAddress: string | null) {
   const [evmBalance, setEvmBalance] = useState<string>('0');
-  const [unlinkBalance, setUnlinkBalance] = useState<string>('0');
-  const [unlinkAddress, setUnlinkAddress] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Keep the latest walletAddress in a ref so the interval callback never
-  // captures a stale closure.
   const addressRef = useRef(walletAddress);
   addressRef.current = walletAddress;
 
@@ -33,10 +35,6 @@ export function useBalance(walletAddress: string | null) {
         address: addr as `0x${string}`,
       });
       setEvmBalance(formatEther(rawBalance));
-
-      // Unlink SDK is stubbed -- return empty/null for now
-      setUnlinkBalance('0');
-      setUnlinkAddress('');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to fetch balance');
     } finally {
@@ -47,12 +45,11 @@ export function useBalance(walletAddress: string | null) {
   useEffect(() => {
     if (!walletAddress) return;
 
-    // Fetch immediately on mount / address change
     refetch();
 
     const id = setInterval(refetch, POLL_INTERVAL_MS);
     return () => clearInterval(id);
   }, [walletAddress, refetch]);
 
-  return { evmBalance, unlinkBalance, unlinkAddress, isLoading, error, refetch };
+  return { evmBalance, isLoading, error, refetch };
 }

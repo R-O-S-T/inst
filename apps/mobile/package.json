@@ -23,7 +23,9 @@
     "@react-navigation/native": "^7",
     "@react-navigation/bottom-tabs": "^7",
     "react-native-screens": "^4",
-    "react-native-safe-area-context": "^5"
+    "react-native-safe-area-context": "^5",
+    "@unlink-xyz/sdk": "^0.0.2-canary.0",
+    "@scure/bip39": "^2.0.1"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
