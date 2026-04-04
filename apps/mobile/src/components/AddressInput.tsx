@@ -1,6 +1,5 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
 
 interface AddressInputProps {
   value: string;
@@ -9,12 +8,7 @@ interface AddressInputProps {
 }
 
 export function AddressInput({ value, onChange, addressType }: AddressInputProps) {
-  const handlePaste = async () => {
-    const clip = await Clipboard.getStringAsync();
-    if (clip) {
-      onChange(clip);
-    }
-  };
+  // Clipboard paste not available without native module — user can long-press the input to paste
 
   return (
     <View style={styles.container}>
@@ -29,9 +23,6 @@ export function AddressInput({ value, onChange, addressType }: AddressInputProps
           autoCapitalize="none"
           autoCorrect={false}
         />
-        <Pressable style={styles.pasteButton} onPress={handlePaste}>
-          <Text style={styles.pasteText}>Paste</Text>
-        </Pressable>
       </View>
       {addressType === 'evm' && (
         <View style={[styles.badge, styles.badgePublic]}>
