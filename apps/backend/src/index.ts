@@ -15,6 +15,11 @@ const PORT = process.env.PORT || 3000;
 // --------------- Middleware ---------------
 app.use(helmet());
 app.use(cors());
+
+// Mount webhook routes BEFORE express.json() so the webhook handler
+// can use express.raw() for HMAC signature verification on the raw body.
+app.use('/webhooks', webhookRouter);
+
 app.use(express.json());
 
 // --------------- Routes ---------------
@@ -22,7 +27,6 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: Date.now() });
 });
 
-app.use('/webhooks', webhookRouter);
 app.use('/api', sendPrivateRouter);
 app.use('/api', userRouter);
 
