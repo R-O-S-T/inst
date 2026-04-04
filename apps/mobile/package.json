@@ -25,7 +25,13 @@
     "react-native-screens": "^4",
     "react-native-safe-area-context": "^5",
     "@unlink-xyz/sdk": "^0.0.2-canary.0",
-    "@scure/bip39": "^2.0.1"
+    "@scure/bip39": "^2.0.1",
+    "@scure/bip32": "^1.6.0",
+    "@noble/hashes": "^1.7.0",
+    "permissionless": "^0.2",
+    "expo-image-picker": "~16.1.0",
+    "expo-file-system": "~18.1.0",
+    "@react-navigation/native-stack": "^7"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
