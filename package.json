@@ -3,6 +3,22 @@
   "version": "1.0.0",
   "private": true,
   "pnpm": {
-    "onlyBuiltDependencies": ["@react-native-community/cli", "react-native", "esbuild"]
+    "onlyBuiltDependencies": [
+      "@react-native-community/cli",
+      "react-native",
+      "esbuild"
+    ],
+    "overrides": {
+      "@react-native-async-storage/async-storage": "2.1.2"
+    }
+  },
+  "scripts": {
+    "android": "expo run:android",
+    "ios": "expo run:ios"
+  },
+  "dependencies": {
+    "expo": "~54.0.33",
+    "react": "19.1.0",
+    "react-native": "0.81.5"
   }
 }
