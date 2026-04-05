@@ -51,7 +51,13 @@ export function useSafeContext() {
   return useContext(SafeContext);
 }
 
-export function SafeProvider({ children }: { children: React.ReactNode }) {
+interface SafeProviderProps {
+  children: React.ReactNode;
+  /** Optional external signer (image-auth path). If provided, used instead of Dynamic wallet. */
+  externalSigner?: WalletClient<Transport, Chain, Account> | null;
+}
+
+export function SafeProvider({ children, externalSigner }: SafeProviderProps) {
   const { wallets, isAuthenticated } = useWallet();
   const wallet = wallets[0];
 
@@ -68,7 +74,7 @@ export function SafeProvider({ children }: { children: React.ReactNode }) {
 
   // Reset state when user changes (logout → login with different account)
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated && !externalSigner) {
       initForRef.current = null;
       setSafeAddress(null);
       setSmartAccountClient(null);
@@ -78,9 +84,80 @@ export function SafeProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(true);
       setError(null);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, externalSigner]);
 
+  // External signer path (image-auth): find the Safe and create a client
   useEffect(() => {
+    if (!externalSigner) return;
+
+    const signerAddr = externalSigner.account.address;
+    if (initForRef.current === signerAddr) return;
+    initForRef.current = signerAddr;
+
+    console.log('[SafeProvider] External signer init for:', signerAddr);
+
+    (async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        // Look up the Safe address -- check direct key first, then scan all
+        const addrKey = safeAddressKey(signerAddr);
+        let storedAddress = await AsyncStorage.getItem(addrKey);
+
+        if (!storedAddress) {
+          // Scan all safe-address-* keys for one where this address is an owner
+          const allKeys = await AsyncStorage.getAllKeys();
+          const safeKeys = allKeys.filter((k) => k.startsWith('@instant/safe-address-'));
+          const pub = getPublicClient();
+
+          for (const key of safeKeys) {
+            const candidate = await AsyncStorage.getItem(key);
+            if (!candidate) continue;
+            try {
+              const ownersResult = await getSafeOwners(pub, candidate as `0x${string}`);
+              if (ownersResult.some((o) => o.toLowerCase() === signerAddr.toLowerCase())) {
+                storedAddress = candidate;
+                break;
+              }
+            } catch {
+              // skip undeployed safes
+            }
+          }
+        }
+
+        if (!storedAddress) {
+          throw new Error('No Safe found for image-derived address');
+        }
+
+        console.log('[SafeProvider] External signer loading Safe:', storedAddress);
+
+        const result = await createSafeClient(externalSigner, storedAddress as `0x${string}`);
+
+        setSafeAddress(storedAddress as `0x${string}`);
+        setSmartAccountClient(result.smartAccountClient);
+        setIsDeployed(true); // image path only works with existing Safes
+        setIsLoading(false);
+        console.log('[SafeProvider] External signer Safe client ready');
+
+        // Read owners in background
+        getSafeOwners(getPublicClient(), storedAddress as `0x${string}`)
+          .then((ownersResult) => setOwners(ownersResult))
+          .catch(() => console.warn('[SafeProvider] Could not read owners'));
+        getSafeThreshold(getPublicClient(), storedAddress as `0x${string}`)
+          .then((t) => setThreshold(t))
+          .catch(() => {});
+      } catch (err: any) {
+        console.error('[SafeProvider] External signer init failed:', err?.message);
+        setError(err?.message || 'Safe init failed');
+        setIsLoading(false);
+      }
+    })();
+  }, [externalSigner]);
+
+  // Dynamic wallet path (existing behavior)
+  useEffect(() => {
+    if (externalSigner) return; // skip when using external signer
     if (!wallet || !isAuthenticated) return;
 
     const walletAddr = (wallet as any).address as string | undefined;
@@ -175,7 +252,7 @@ export function SafeProvider({ children }: { children: React.ReactNode }) {
       }
     })();
 
-  }, [wallet, isAuthenticated]);
+  }, [wallet, isAuthenticated, externalSigner]);
 
   const refreshOwners = useCallback(async () => {
     if (!safeAddress) return;

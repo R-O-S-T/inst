@@ -4,6 +4,7 @@ import { baseSepolia } from 'viem/chains';
 
 import { dynamicClient } from '../../client';
 import { useWallet } from './useWallet';
+import { useUnlinkSeedContext } from '../providers/UnlinkSeedProvider';
 import { createUnlinkFromSeed, ULNKM, TOKEN_BY_SYMBOL, ENGINE_URL } from '../services/unlinkClient';
 import { UNLINK_API_KEY } from '../config/secrets';
 
@@ -50,13 +51,25 @@ const publicClient = createPublicClient({
 
 type UnlinkClient = ReturnType<typeof createUnlinkFromSeed>;
 
+interface UseUnlinkOptions {
+  /** If provided (image-auth path), skip signMessage derivation and use this seed directly. */
+  externalSeed?: Uint8Array | null;
+}
+
 /**
  * Hook that manages an Unlink SDK client tied to the current Dynamic wallet.
  *
  * The Unlink seed is DERIVED from the Dynamic wallet via signMessage("unlink-seed-v1").
  * No mnemonic is stored — same wallet always produces same Unlink identity.
+ *
+ * If `externalSeed` is provided (image-auth path), the signMessage derivation is
+ * skipped and the external seed is used directly.
  */
-export function useUnlink() {
+export function useUnlink(options: UseUnlinkOptions = {}) {
+  const { externalSeed: optionsSeed } = options;
+  const { externalSeed: contextSeed } = useUnlinkSeedContext();
+  // Prefer explicitly passed seed, then context seed
+  const externalSeed = optionsSeed ?? contextSeed;
   const { wallets } = useWallet();
 
   const [unlinkAddress, setUnlinkAddress] = useState<string>('');
@@ -93,6 +106,51 @@ export function useUnlink() {
   // ---- derive seed + init client ----
 
   useEffect(() => {
+    // External seed path: skip Dynamic wallet, use the provided seed directly
+    if (externalSeed && externalSeed.length === 32) {
+      if (initStartedRef.current) return;
+      initStartedRef.current = true;
+
+      let cancelled = false;
+
+      (async () => {
+        try {
+          // Use a minimal walletClient — Unlink only needs it for EVM
+          // deposits/withdrawals. For the image path we create one from
+          // the public client (read-only is fine for balance checks;
+          // deposit/withdraw will need the Safe's smartAccountClient).
+          const client = createUnlinkFromSeed(
+            publicClient as any, // evm adapter only used for on-chain ops
+            publicClient,
+            externalSeed,
+          );
+          clientRef.current = client;
+
+          await client.ensureRegistered();
+          const addr = await client.getAddress();
+
+          if (cancelled) return;
+
+          console.log('[useUnlink] initialized with external seed, address:', addr);
+          setUnlinkAddress(addr);
+          setIsReady(true);
+
+          await refreshBalance();
+          console.log('[useUnlink] external seed init complete');
+        } catch (err: unknown) {
+          if (!cancelled) {
+            setError(err instanceof Error ? err.message : 'Unlink init failed');
+            console.error('[useUnlink] external seed init error', err);
+          }
+        }
+      })();
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // Dynamic wallet path: derive seed from signMessage
     const wallet = wallets[0];
     if (!wallet || initStartedRef.current) return;
     initStartedRef.current = true;
@@ -144,7 +202,7 @@ export function useUnlink() {
     return () => {
       cancelled = true;
     };
-  }, [wallets, refreshBalance]);
+  }, [wallets, externalSeed, refreshBalance]);
 
   // ---- balance polling ----
 
