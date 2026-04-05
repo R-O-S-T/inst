@@ -12,7 +12,6 @@ import {
 export interface SettingsScreenProps {
   safeAddress?: string;
   owners: string[];
-  threshold: number;
   isDeployed: boolean;
   onRotateKey: () => void;
   onLogout: () => void;
@@ -54,7 +53,6 @@ function CopyableAddress({ address }: { address: string }) {
 export function SettingsScreen({
   safeAddress,
   owners,
-  threshold,
   isDeployed,
   onRotateKey,
   onLogout,
@@ -127,12 +125,6 @@ export function SettingsScreen({
                   <CopyableAddress address={owner} />
                 </View>
               ))}
-              <View style={styles.thresholdRow}>
-                <Text style={styles.label}>Threshold</Text>
-                <Text style={styles.thresholdText}>
-                  {threshold} of {owners.length}
-                </Text>
-              </View>
             </>
           ) : (
             <Text style={styles.secondaryText}>No owners loaded</Text>
@@ -278,20 +270,6 @@ const styles = StyleSheet.create({
     borderTopColor: '#2A2A2A',
     paddingTop: 12,
     marginTop: 4,
-  },
-  thresholdRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: '#2A2A2A',
-    paddingTop: 14,
-    marginTop: 8,
-  },
-  thresholdText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
   },
   rotateButton: {
     backgroundColor: '#6366F1',

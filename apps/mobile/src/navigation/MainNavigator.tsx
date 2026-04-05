@@ -152,7 +152,7 @@ function ConnectedHistoryScreen() {
 // ---------- Connected Settings & Key Rotation wrappers ----------
 
 function ConnectedSettingsScreen() {
-  const { safeAddress, owners, threshold, isDeployed } = useSafeContext();
+  const { safeAddress, owners, isDeployed } = useSafeContext();
   const { logout } = useWallet();
   const navigation = useNavigation<any>();
 
@@ -160,7 +160,6 @@ function ConnectedSettingsScreen() {
     <SettingsScreen
       safeAddress={safeAddress ?? undefined}
       owners={owners}
-      threshold={Number(threshold)}
       isDeployed={isDeployed}
       onRotateKey={() => navigation.navigate('KeyRotation')}
       onLogout={logout}
