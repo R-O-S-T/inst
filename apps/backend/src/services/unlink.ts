@@ -44,13 +44,13 @@ function makeUnlinkClient(mnemonic: string) {
   });
 }
 
-// ── Exported functions ────────────────────────────────────────────────
+// ── Gift wallet operations ───────────────────────────────────────────
 
 /**
- * Generate a new mnemonic and derive the Unlink address.
- * Also registers the user with the Unlink backend.
+ * Generate a throwaway Unlink wallet for a gift link.
+ * The mnemonic is stored in the DB (for refunds) and encoded in the QR.
  */
-export async function generateUserMnemonic(): Promise<{ mnemonic: string; unlinkAddress: string }> {
+export async function generateGiftWallet(): Promise<{ mnemonic: string; unlinkAddress: string }> {
   try {
     const mnemonic = generateMnemonic(wordlist);
     const client = makeUnlinkClient(mnemonic);
@@ -58,28 +58,28 @@ export async function generateUserMnemonic(): Promise<{ mnemonic: string; unlink
     const unlinkAddress = await client.getAddress();
     await client.ensureRegistered();
 
-    logger.info(`Generated Unlink wallet: ${unlinkAddress}`);
+    logger.info(`Generated gift wallet: ${unlinkAddress}`);
     return { mnemonic, unlinkAddress };
   } catch (err) {
-    logger.error('generateUserMnemonic failed', err);
+    logger.error('generateGiftWallet failed', err);
     throw err;
   }
 }
 
 /**
- * Private transfer from a sender's Unlink pool to a recipient Unlink address.
- * Sender, recipient, amount, and token are ALL private on-chain.
+ * Transfer funds from a gift wallet to a recipient.
+ * Used for refunds (cancel flow): gift wallet → sender's Unlink address.
  */
-export async function transferToUser(
-  senderMnemonic: string,
+export async function transferFromGiftWallet(
+  giftMnemonic: string,
   recipientUnlinkAddress: string,
   amount: string,
 ): Promise<string> {
   try {
-    const client = makeUnlinkClient(senderMnemonic);
+    const client = makeUnlinkClient(giftMnemonic);
     await client.ensureRegistered();
 
-    logger.info(`Private transfer: to=${recipientUnlinkAddress} amount=${amount}`);
+    logger.info(`Gift wallet transfer: to=${recipientUnlinkAddress} amount=${amount}`);
 
     const result = await client.transfer({
       recipientAddress: recipientUnlinkAddress,
@@ -87,25 +87,24 @@ export async function transferToUser(
       amount,
     });
 
-    logger.info(`Transfer submitted: txId=${result.txId}`);
+    logger.info(`Gift transfer submitted: txId=${result.txId}`);
 
     const confirmed = await client.pollTransactionStatus(result.txId);
-    logger.info(`Transfer status: ${confirmed.status}`);
+    logger.info(`Gift transfer status: ${confirmed.status}`);
 
     return result.txId;
   } catch (err) {
-    logger.error(`transferToUser failed: to=${recipientUnlinkAddress}`, err);
+    logger.error(`transferFromGiftWallet failed: to=${recipientUnlinkAddress}`, err);
     throw err;
   }
 }
 
 /**
- * Query the Unlink pool balance for a given mnemonic.
- * Returns formatted balance string.
+ * Check the balance of a gift wallet.
  */
-export async function getBalance(mnemonic: string): Promise<string> {
+export async function getGiftWalletBalance(giftMnemonic: string): Promise<string> {
   try {
-    const client = makeUnlinkClient(mnemonic);
+    const client = makeUnlinkClient(giftMnemonic);
     const balances = await client.getBalances({ token: TOKEN });
 
     const entry = balances.balances?.find(
@@ -115,75 +114,8 @@ export async function getBalance(mnemonic: string): Promise<string> {
     const raw = BigInt(entry?.amount ?? '0');
     return formatUnits(raw, 18);
   } catch (err) {
-    logger.error('getBalance failed', err);
+    logger.error('getGiftWalletBalance failed', err);
     throw err;
   }
 }
 
-/**
- * Deposit ERC-20 tokens from the EVM wallet into a user's Unlink pool.
- */
-export async function depositToPool(
-  mnemonic: string,
-  amount: string,
-): Promise<string> {
-  try {
-    const client = makeUnlinkClient(mnemonic);
-    const { publicClient } = getEvmProvider();
-
-    await client.ensureRegistered();
-
-    // Ensure ERC-20 approval for Unlink pool
-    const approval = await client.ensureErc20Approval({ token: TOKEN, amount });
-    if (approval.status === 'submitted') {
-      logger.info(`ERC-20 approval tx: ${approval.txHash}`);
-      await publicClient.waitForTransactionReceipt({
-        hash: approval.txHash as `0x${string}`,
-      });
-    }
-
-    const result = await client.deposit({ token: TOKEN, amount });
-    logger.info(`Deposit submitted: txId=${result.txId}`);
-
-    const confirmed = await client.pollTransactionStatus(result.txId);
-    logger.info(`Deposit status: ${confirmed.status}`);
-
-    return result.txId;
-  } catch (err) {
-    logger.error('depositToPool failed', err);
-    throw err;
-  }
-}
-
-/**
- * Withdraw from Unlink pool to a public EVM address.
- * Sender is PRIVATE, recipient and amount are PUBLIC.
- */
-export async function withdrawToEvm(
-  mnemonic: string,
-  recipientEvmAddress: string,
-  amount: string,
-): Promise<string> {
-  try {
-    const client = makeUnlinkClient(mnemonic);
-    await client.ensureRegistered();
-
-    const result = await client.withdraw({
-      recipientEvmAddress,
-      token: TOKEN,
-      amount,
-    });
-
-    logger.info(`Withdraw submitted: txId=${result.txId}`);
-
-    const confirmed = await client.pollTransactionStatus(result.txId);
-    logger.info(`Withdraw status: ${confirmed.status}`);
-
-    return result.txId;
-  } catch (err) {
-    logger.error(`withdrawToEvm failed: to=${recipientEvmAddress}`, err);
-    throw err;
-  }
-}
-
-export { TOKEN, ENGINE_URL };

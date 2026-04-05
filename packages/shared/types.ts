@@ -1,23 +1,9 @@
 // ========== API contracts ==========
 
-export interface SendPrivateRequest {
-  senderWalletAddress: string;
-  recipientUnlinkAddress: string;
-  amount: string;
-  token: string;
-}
-
-export interface SendPrivateResponse {
-  success: boolean;
-  txHash?: string;
-  error?: string;
-}
-
 export interface UserBalanceResponse {
   evmAddress: string;
   evmBalance: string;
   unlinkAddress: string;
-  unlinkBalance: string;
 }
 
 export interface UserCreateWebhookPayload {
@@ -29,18 +15,58 @@ export interface UserCreateWebhookPayload {
   };
 }
 
+export interface RegisterUnlinkRequest {
+  unlinkAddress: string;
+}
+
+// ── Gift link contracts ──────────────────────────────────────────────
+
+export interface CreateGiftRequest {
+  senderAddress: string;
+  amount: string;
+  token: string;
+}
+
+export interface CreateGiftResponse {
+  claimCode: string;
+  claimUrl: string;
+  giftAddress: string;
+}
+
+export interface GiftMetadataResponse {
+  amount: string;
+  token: string;
+  status: 'pending' | 'claimed' | 'expired';
+  createdAt: string;
+}
+
+export interface ClaimGiftRequest {
+  receiverAddress: string;
+}
+
 // ========== Route contract ==========
 //
 // POST /webhooks/dynamic
 //   Body: UserCreateWebhookPayload
 //   Response: 200 { received: true }
 //
-// POST /api/send-private
-//   Body: SendPrivateRequest
-//   Response: SendPrivateResponse
-//
 // GET /api/user/:walletAddress
 //   Response: UserBalanceResponse
+//
+// PUT /api/user/:walletAddress/unlink
+//   Body: RegisterUnlinkRequest
+//   Response: { success: true }
+//
+// POST /api/gift
+//   Body: CreateGiftRequest
+//   Response: CreateGiftResponse
+//
+// GET /api/gift/:claimCode
+//   Response: GiftMetadataResponse
+//
+// POST /api/gift/:claimCode/claim
+//   Body: ClaimGiftRequest
+//   Response: { success: true }
 //
 // GET /api/health
 //   Response: { status: 'ok', timestamp: number }
