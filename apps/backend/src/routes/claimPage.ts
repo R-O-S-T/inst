@@ -4,6 +4,8 @@ import { getGiftByClaimCode } from '../services/db.js';
 
 export const claimPageRouter = Router();
 
+const APK_URL = process.env.APK_URL || 'https://github.com/R-O-S-T/inst/releases/latest/download/app-release.apk';
+
 claimPageRouter.get('/claim/:claimCode', (req: Request, res: Response) => {
   const { claimCode } = req.params;
   const entropy = String(req.query.e || '');
@@ -78,7 +80,7 @@ claimPageRouter.get('/claim/:claimCode', (req: Request, res: Response) => {
           // 3. After a delay, if still on this page, offer APK download
           setTimeout(function() {
             if (!document.hidden) {
-              window.location.href = '/public/instant.apk';
+              window.location.href = '${APK_URL}';
               document.getElementById('openBtn').style.display = 'block';
               document.getElementById('claimBtn').textContent = 'Download Again';
             }
