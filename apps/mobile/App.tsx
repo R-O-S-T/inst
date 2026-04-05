@@ -4,8 +4,10 @@ import '@walletconnect/react-native-compat';
 import React from 'react';
 import { StatusBar } from 'react-native';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import * as Linking from 'expo-linking';
 import { dynamicClient } from './client';
 import MainNavigator from './src/navigation/MainNavigator';
+import { ClaimProvider } from './src/providers/ClaimProvider';
 
 const DarkTheme = {
   ...DefaultTheme,
@@ -21,14 +23,25 @@ const DarkTheme = {
   },
 };
 
+const linking = {
+  prefixes: [Linking.createURL('/'), 'instant://'],
+  config: {
+    screens: {
+      Claim: 'claim/:claimCode',
+    },
+  },
+};
+
 export default function App() {
   return (
     <>
       <dynamicClient.reactNative.WebView />
-      <NavigationContainer theme={DarkTheme}>
-        <StatusBar barStyle="light-content" backgroundColor="#0D0D0D" />
-        <MainNavigator />
-      </NavigationContainer>
+      <ClaimProvider>
+        <NavigationContainer theme={DarkTheme} linking={linking}>
+          <StatusBar barStyle="light-content" backgroundColor="#0D0D0D" />
+          <MainNavigator />
+        </NavigationContainer>
+      </ClaimProvider>
     </>
   );
 }

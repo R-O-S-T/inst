@@ -17,6 +17,7 @@ import { TOKENS, TokenInfo } from '../services/unlinkClient';
 import { getWalletTokens, MoralisToken } from '../services/moralis';
 import { AddressInput } from '../components/AddressInput';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { QRCodeDisplay } from '../components/QRCodeDisplay';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -28,9 +29,10 @@ interface SendScreenProps {
   onSendPublic?: (to: string, amount: string, token: string) => Promise<string>;
   onSendPrivate?: (to: string, amount: string, token: string) => Promise<string>;
   onSendPrivateToEvm?: (to: string, amount: string, token: string) => Promise<string>;
+  onCreateGift?: (amount: string, token: string) => Promise<{ qrUrl: string }>;
 }
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2 | 3 | 'gift-qr';
 type AddressType = 'evm' | 'unlink' | null;
 type TxStatus = 'idle' | 'pending' | 'success' | 'error';
 
@@ -58,12 +60,17 @@ export function SendScreen({
   onSendPublic,
   onSendPrivate,
   onSendPrivateToEvm,
+  onCreateGift,
 }: SendScreenProps) {
   const navigation = useNavigation<any>();
 
   // Flow state
   const [step, setStep] = useState<Step>(1);
   const [isPrivateMode, setIsPrivateMode] = useState(false);
+  const [isGiftMode, setIsGiftMode] = useState(false);
+  const [giftLoading, setGiftLoading] = useState(false);
+  const [giftQrUrl, setGiftQrUrl] = useState<string | null>(null);
+  const [giftError, setGiftError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedToken, setSelectedToken] = useState<TokenInfo | null>(null);
   const [amount, setAmount] = useState('');
@@ -374,14 +381,95 @@ export function SendScreen({
             ))}
           </View>
 
+          {/* Gift toggle */}
+          {selectedToken && !selectedToken.isNative && (
+            <View style={styles.privacyRow}>
+              <Text style={styles.privacyLabel}>Send as Gift Link</Text>
+              <Switch
+                value={isGiftMode}
+                onValueChange={setIsGiftMode}
+                trackColor={{ false: '#2A2A2A', true: '#8B5CF6' }}
+                thumbColor={isGiftMode ? '#FFFFFF' : '#999999'}
+              />
+            </View>
+          )}
+
           {/* Next button */}
           {amountNum > 0 && (
             <Pressable
               style={styles.nextButton}
-              onPress={() => setStep(3)}
+              onPress={async () => {
+                if (isGiftMode && onCreateGift && selectedToken) {
+                  setGiftLoading(true);
+                  setGiftError(null);
+                  setStep('gift-qr');
+                  try {
+                    const { qrUrl } = await onCreateGift(amount, selectedToken.symbol);
+                    setGiftQrUrl(qrUrl);
+                  } catch (err: any) {
+                    setGiftError(err?.message || 'Failed to create gift');
+                  } finally {
+                    setGiftLoading(false);
+                  }
+                } else {
+                  setStep(3);
+                }
+              }}
             >
-              <Text style={styles.nextButtonText}>Next</Text>
+              <Text style={styles.nextButtonText}>
+                {isGiftMode ? 'Create Gift' : 'Next'}
+              </Text>
             </Pressable>
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  // ── Step 'gift-qr': QR Code Display ──
+
+  if (step === 'gift-qr') {
+    return (
+      <View style={styles.screen}>
+        <View style={styles.header}>
+          <Pressable style={styles.headerButton} onPress={() => { setGiftQrUrl(null); setGiftError(null); setStep(2); }}>
+            <Text style={styles.headerArrow}>{'\u2190'}</Text>
+          </Pressable>
+          <Text style={styles.headerTitle}>Gift Link</Text>
+          <View style={styles.headerButton} />
+        </View>
+
+        <View style={styles.centered}>
+          {giftLoading && (
+            <>
+              <ActivityIndicator size="large" color="#6366F1" />
+              <Text style={[styles.connectText, { marginTop: 16 }]}>Creating gift link...</Text>
+            </>
+          )}
+
+          {giftError && (
+            <>
+              <Text style={{ color: '#EF4444', fontSize: 16, textAlign: 'center', marginBottom: 16 }}>{giftError}</Text>
+              <Pressable style={styles.nextButton} onPress={() => { setGiftQrUrl(null); setGiftError(null); setStep(2); }}>
+                <Text style={styles.nextButtonText}>Try Again</Text>
+              </Pressable>
+            </>
+          )}
+
+          {giftQrUrl && !giftLoading && !giftError && (
+            <>
+              <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '700', marginBottom: 8 }}>Gift Ready!</Text>
+              <Text style={{ color: '#999999', fontSize: 14, marginBottom: 16, textAlign: 'center' }}>
+                {amount} {tokenSymbol} — scan to claim
+              </Text>
+              <QRCodeDisplay address={giftQrUrl} label="Share this QR code" size={220} />
+              <Pressable
+                style={[styles.nextButton, { marginTop: 24, paddingHorizontal: 48 }]}
+                onPress={() => { setStep(1); setSelectedToken(null); setAmount(''); setIsGiftMode(false); setGiftQrUrl(null); }}
+              >
+                <Text style={styles.nextButtonText}>Done</Text>
+              </Pressable>
+            </>
           )}
         </View>
       </View>

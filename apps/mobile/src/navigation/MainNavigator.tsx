@@ -1,9 +1,13 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { ActivityIndicator, Text, View, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
+import * as Linking from 'expo-linking';
 import { parseUnits } from 'viem';
+import { mnemonicToEntropy } from '@scure/bip39';
+// @ts-ignore — runtime export, missing .d.ts
+import { wordlist } from '@scure/bip39/wordlists/english';
 
 import { useWallet } from '../hooks/useWallet';
 import { useImageAuth } from '../hooks/useImageAuth';
@@ -13,7 +17,9 @@ import { useTransactions } from '../hooks/useTransactions';
 import { useUnlink } from '../hooks/useUnlink';
 import { useSafeContext } from '../providers/SafeProvider';
 import { UnlinkSeedProvider } from '../providers/UnlinkSeedProvider';
+import { useClaimContext } from '../providers/ClaimProvider';
 import { TOKEN_BY_SYMBOL } from '../services/unlinkClient';
+import { createGift, registerUnlinkAddress, BACKEND_URL } from '../services/api';
 
 import { AuthScreen } from '../screens/AuthScreen';
 import { BalanceScreen } from '../screens/BalanceScreen';
@@ -22,6 +28,7 @@ import { ReceiveScreen } from '../screens/ReceiveScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { KeyRotationScreen } from '../screens/KeyRotationScreen';
+import { ClaimScreen } from '../screens/ClaimScreen';
 
 // ---------- Connected screen wrappers ----------
 
@@ -71,7 +78,7 @@ function ConnectedSendScreen() {
   const { safeAddress, smartAccountClient } = useSafeContext();
   const displayAddress = safeAddress ?? address;
   const { balances } = useBalance(displayAddress);
-  const { unlinkBalance, transfer, privateSendToEvm } = useUnlink();
+  const { unlinkAddress, unlinkBalance, transfer, privateSendToEvm } = useUnlink();
   const { sendPublic } = useSendTransaction(smartAccountClient);
 
   const totalUlnkm = useMemo(() => {
@@ -105,6 +112,21 @@ function ConnectedSendScreen() {
     [privateSendToEvm],
   );
 
+  const onCreateGift = useCallback(
+    async (amount: string, tokenSymbol: string): Promise<{ qrUrl: string }> => {
+      if (!displayAddress || !unlinkAddress) throw new Error('Wallet not ready');
+      const gift = await createGift(displayAddress, amount, tokenSymbol);
+      const decimals = TOKEN_BY_SYMBOL[tokenSymbol]?.decimals ?? 18;
+      const amountBigInt = parseUnits(amount, decimals);
+      await transfer(gift.giftAddress, amountBigInt, tokenSymbol);
+      const entropy = mnemonicToEntropy(gift.giftMnemonic, wordlist);
+      const entropyHex = Array.from(entropy).map((b: number) => b.toString(16).padStart(2, '0')).join('');
+      const qrUrl = `${BACKEND_URL}/claim/${gift.claimCode}?e=${entropyHex}`;
+      return { qrUrl };
+    },
+    [displayAddress, unlinkAddress, transfer],
+  );
+
   return (
     <SendScreen
       balances={{ ...balances, ULNKm: totalUlnkm }}
@@ -113,6 +135,7 @@ function ConnectedSendScreen() {
       onSendPublic={wrappedSendPublic}
       onSendPrivate={wrappedSendPrivate}
       onSendPrivateToEvm={wrappedSendPrivateToEvm}
+      onCreateGift={onCreateGift}
     />
   );
 }
@@ -186,6 +209,29 @@ function ConnectedKeyRotationScreen() {
   );
 }
 
+// ---------- Connected Claim Screen ----------
+
+function ConnectedClaimScreen({ route }: { route: any }) {
+  const { safeAddress } = useSafeContext();
+  const { unlinkAddress, refreshBalance } = useUnlink();
+  const { clearClaim } = useClaimContext();
+  const navigation = useNavigation<any>();
+
+  return (
+    <ClaimScreen
+      claimCode={route.params?.claimCode ?? ''}
+      entropyHex={route.params?.e ?? ''}
+      safeAddress={safeAddress}
+      unlinkAddress={unlinkAddress}
+      onClaimComplete={() => {
+        refreshBalance();
+        clearClaim();
+        navigation.navigate('Tabs', { screen: 'Balance' });
+      }}
+    />
+  );
+}
+
 // ---------- Tab icon helper ----------
 
 function TabIcon({ label, color }: { label: string; color: string }) {
@@ -255,6 +301,46 @@ function DynamicTabs() {
 function MainNavigatorInner() {
   const { isAuthenticated, isLoading: authLoading } = useWallet();
   const { safeAddress } = useSafeContext();
+  const { unlinkAddress } = useUnlink();
+  const { pendingClaim, setClaimParams } = useClaimContext();
+  const navigation = useNavigation<any>();
+
+  // Deep link interception
+  useEffect(() => {
+    Linking.getInitialURL().then((url) => {
+      if (url) parseClaimUrl(url);
+    });
+    const sub = Linking.addEventListener('url', ({ url }) => parseClaimUrl(url));
+    return () => sub.remove();
+  }, []);
+
+  function parseClaimUrl(url: string) {
+    const parsed = Linking.parse(url);
+    if (parsed.path?.startsWith('claim/')) {
+      const code = parsed.path.replace('claim/', '');
+      const entropy = (parsed.queryParams?.e as string) ?? '';
+      if (code && entropy) setClaimParams(code, entropy);
+    }
+  }
+
+  // Register Unlink address with backend (retries if webhook hasn't fired yet)
+  useEffect(() => {
+    if (safeAddress && unlinkAddress) {
+      registerUnlinkAddress(safeAddress, unlinkAddress).catch((err) => {
+        console.warn('[MainNavigator] failed to register unlink address:', err);
+      });
+    }
+  }, [safeAddress, unlinkAddress]);
+
+  // Auto-navigate to Claim when ready
+  useEffect(() => {
+    if (isAuthenticated && safeAddress && unlinkAddress && pendingClaim) {
+      navigation.navigate('Claim', {
+        claimCode: pendingClaim.claimCode,
+        e: pendingClaim.entropyHex,
+      });
+    }
+  }, [isAuthenticated, safeAddress, unlinkAddress, pendingClaim, navigation]);
 
   if (!isAuthenticated && !authLoading) {
     return <AuthScreen />;
@@ -273,6 +359,7 @@ function MainNavigatorInner() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Tabs" component={DynamicTabs} />
       <Stack.Screen name="KeyRotation" component={ConnectedKeyRotationScreen} />
+      <Stack.Screen name="Claim" component={ConnectedClaimScreen} options={{ presentation: 'modal' }} />
     </Stack.Navigator>
   );
 }
