@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import { webhookRouter } from './routes/webhook.js';
 import { userRouter } from './routes/user.js';
 import { giftRouter } from './routes/gift.js';
+import { claimPageRouter } from './routes/claimPage.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { logger } from './utils/logger.js';
 import { initDb, getExpiredPendingGifts, cancelGift, getUserByEvmAddress } from './services/db.js';
@@ -24,6 +25,12 @@ app.use(cors());
 app.use('/webhooks', webhookRouter);
 
 app.use(express.json());
+
+// --------------- Static files (APK download) ---------------
+app.use('/public', express.static('public'));
+
+// --------------- Claim landing page (before API routes) ---------------
+app.use(claimPageRouter);
 
 // --------------- Routes ---------------
 app.get('/api/health', (_req, res) => {
