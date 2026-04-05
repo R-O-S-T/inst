@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { getUserByEvmAddress, updateUserUnlink } from '../services/db.js';
+import { getUserByEvmAddress, updateUserUnlink, createUser } from '../services/db.js';
 import { logger } from '../utils/logger.js';
 
 export const userRouter = Router();
@@ -73,10 +73,11 @@ userRouter.put('/user/:walletAddress/unlink', (req: Request, res: Response) => {
       return;
     }
 
-    const user = getUserByEvmAddress(walletAddress);
+    // Auto-create user if webhook hasn't fired yet (idempotent)
+    let user = getUserByEvmAddress(walletAddress);
     if (!user) {
-      res.status(404).json({ error: 'User not found' });
-      return;
+      createUser(walletAddress);
+      user = getUserByEvmAddress(walletAddress);
     }
 
     updateUserUnlink(walletAddress, unlinkAddress);
