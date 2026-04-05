@@ -3,7 +3,7 @@ node_modules/
 dist/
 *.tsbuildinfo
 .env
-secrets.ts
+# secrets.ts — committed for hackathon (testnet keys only)
 android/
 ios/
 data/
