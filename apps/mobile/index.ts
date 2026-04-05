@@ -1,3 +1,9 @@
+// BigInt serialization polyfill — required for ERC-4337 UserOperations
+// which contain BigInt values that pass through JSON.stringify via the Dynamic WebView
+(BigInt.prototype as any).toJSON = function () {
+  return this.toString();
+};
+
 import { registerRootComponent } from 'expo';
 
 import App from './App';

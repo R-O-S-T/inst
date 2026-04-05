@@ -15,8 +15,13 @@ import { useWallet } from '../hooks/useWallet';
 import { createSafeClient, getPublicClient } from '../lib/safe-client';
 import { getSafeOwners, getSafeThreshold } from '../lib/rotate';
 
-const SAFE_ADDRESS_KEY = '@instant/safe-address';
-const SAFE_DEPLOYED_KEY = '@instant/safe-deployed';
+// Per-user keys — Safe address is tied to the EOA that created it
+function safeAddressKey(ownerAddress: string) {
+  return `@instant/safe-address-${ownerAddress.toLowerCase()}`;
+}
+function safeDeployedKey(ownerAddress: string) {
+  return `@instant/safe-deployed-${ownerAddress.toLowerCase()}`;
+}
 
 interface SafeContextValue {
   safeAddress: `0x${string}` | null;
@@ -59,13 +64,30 @@ export function SafeProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const initStartedRef = useRef(false);
+  const initForRef = useRef<string | null>(null); // tracks which EOA we initialized for
+
+  // Reset state when user changes (logout → login with different account)
+  useEffect(() => {
+    if (!isAuthenticated) {
+      initForRef.current = null;
+      setSafeAddress(null);
+      setSmartAccountClient(null);
+      setOwners([]);
+      setIsDeployed(false);
+      setIsDeploying(false);
+      setIsLoading(true);
+      setError(null);
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
-    console.log('[SafeProvider] Check:', { wallet: !!wallet, isAuthenticated, initStarted: initStartedRef.current });
-    if (!wallet || !isAuthenticated || initStartedRef.current) return;
-    initStartedRef.current = true;
-    console.log('[SafeProvider] Init starting...');
+    if (!wallet || !isAuthenticated) return;
+
+    const walletAddr = (wallet as any).address as string | undefined;
+    if (!walletAddr || initForRef.current === walletAddr) return;
+    initForRef.current = walletAddr;
+
+    console.log('[SafeProvider] Init starting for:', walletAddr);
 
     (async () => {
       try {
@@ -78,9 +100,12 @@ export function SafeProvider({ children }: { children: React.ReactNode }) {
           chain: baseSepolia,
         });
 
-        // Check for existing Safe
-        const storedAddress = await AsyncStorage.getItem(SAFE_ADDRESS_KEY);
-        const storedDeployed = await AsyncStorage.getItem(SAFE_DEPLOYED_KEY);
+        // Per-user keys
+        const addrKey = safeAddressKey(walletAddr);
+        const deplKey = safeDeployedKey(walletAddr);
+
+        const storedAddress = await AsyncStorage.getItem(addrKey);
+        const storedDeployed = await AsyncStorage.getItem(deplKey);
 
         if (storedAddress) {
           console.log('[SafeProvider] Loading existing Safe:', storedAddress);
@@ -115,7 +140,7 @@ export function SafeProvider({ children }: { children: React.ReactNode }) {
           const address = result.safeAddress;
           console.log('[SafeProvider] Counterfactual Safe:', address);
 
-          await AsyncStorage.setItem(SAFE_ADDRESS_KEY, address);
+          await AsyncStorage.setItem(addrKey, address);
           setSafeAddress(address);
           setSmartAccountClient(result.smartAccountClient);
 
@@ -128,7 +153,7 @@ export function SafeProvider({ children }: { children: React.ReactNode }) {
               value: 0n,
             });
             console.log('[SafeProvider] Deploy tx:', hash);
-            await AsyncStorage.setItem(SAFE_DEPLOYED_KEY, 'true');
+            await AsyncStorage.setItem(deplKey, 'true');
 
             {
               setIsDeployed(true);
