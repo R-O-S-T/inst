@@ -7,7 +7,7 @@ import { useWallet } from './useWallet';
 import { createUnlinkFromSeed, ULNKM, TOKEN_BY_SYMBOL, ENGINE_URL } from '../services/unlinkClient';
 import { UNLINK_API_KEY } from '../config/secrets';
 
-const BALANCE_POLL_MS = 30_000;
+const BALANCE_POLL_MS = 60_000;
 
 export interface UnlinkTransaction {
   tx_id: string;

@@ -4,7 +4,7 @@ import type { MoralisHistoryItem } from '../services/moralis';
 import type { UnlinkTransaction } from './useUnlink';
 import type { Transaction } from '../types';
 
-const REFRESH_INTERVAL_MS = 30_000;
+const REFRESH_INTERVAL_MS = 60_000;
 
 // ── Normalizers ──────────────────────────────────────────────────────
 
@@ -129,14 +129,9 @@ export function useTransactions({
     [walletAddress, getUnlinkTransactions],
   );
 
-  // Initial fetch + auto-refresh
+  // Fetch on mount only — no auto-polling. Use pull-to-refresh.
   useEffect(() => {
     fetchAll();
-
-    intervalRef.current = setInterval(() => fetchAll(true), REFRESH_INTERVAL_MS);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
   }, [fetchAll]);
 
   const refetch = useCallback(() => {

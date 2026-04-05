@@ -3,7 +3,7 @@ import { createPublicClient, http, formatEther, formatUnits, erc20Abi } from 'vi
 import { baseSepolia } from 'viem/chains';
 import { TOKENS } from '../services/unlinkClient';
 
-const POLL_INTERVAL_MS = 15_000;
+const POLL_INTERVAL_MS = 60_000;
 
 const publicClient = createPublicClient({
   chain: baseSepolia,

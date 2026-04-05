@@ -21,9 +21,10 @@ import { HistoryScreen } from '../screens/HistoryScreen';
 // ---------- Connected screen wrappers ----------
 
 function ConnectedBalanceScreen() {
-  const { logout } = useWallet();
+  const { address, logout } = useWallet();
   const { safeAddress, isDeploying } = useSafeContext();
-  const { balances, isLoading, refetch } = useBalance(safeAddress);
+  const displayAddress = safeAddress ?? address;
+  const { balances, isLoading, refetch } = useBalance(displayAddress);
   const { unlinkAddress, unlinkBalance, refreshBalance } = useUnlink();
   const navigation = useNavigation<any>();
 
@@ -47,7 +48,7 @@ function ConnectedBalanceScreen() {
 
   return (
     <BalanceScreen
-      evmAddress={safeAddress ?? undefined}
+      evmAddress={displayAddress ?? undefined}
       evmBalance={balances['ETH'] || '0'}
       unlinkAddress={unlinkAddress}
       unlinkBalance={totalUlnkm}
@@ -61,8 +62,10 @@ function ConnectedBalanceScreen() {
 }
 
 function ConnectedSendScreen() {
+  const { address } = useWallet();
   const { safeAddress, smartAccountClient } = useSafeContext();
-  const { balances } = useBalance(safeAddress);
+  const displayAddress = safeAddress ?? address;
+  const { balances } = useBalance(displayAddress);
   const { unlinkBalance, transfer, privateSendToEvm } = useUnlink();
   const { sendPublic } = useSendTransaction(smartAccountClient);
 
@@ -101,7 +104,7 @@ function ConnectedSendScreen() {
     <SendScreen
       balances={{ ...balances, ULNKm: totalUlnkm }}
       unlinkBalance={totalUlnkm}
-      senderAddress={safeAddress ?? undefined}
+      senderAddress={displayAddress ?? undefined}
       onSendPublic={wrappedSendPublic}
       onSendPrivate={wrappedSendPrivate}
       onSendPrivateToEvm={wrappedSendPrivateToEvm}
@@ -110,23 +113,25 @@ function ConnectedSendScreen() {
 }
 
 function ConnectedReceiveScreen() {
+  const { address } = useWallet();
   const { safeAddress } = useSafeContext();
   const { unlinkAddress } = useUnlink();
 
   return (
     <ReceiveScreen
-      evmAddress={safeAddress ?? undefined}
+      evmAddress={(safeAddress ?? address) ?? undefined}
       unlinkAddress={unlinkAddress || undefined}
     />
   );
 }
 
 function ConnectedHistoryScreen() {
+  const { address } = useWallet();
   const { safeAddress } = useSafeContext();
   const { getTransactions: getUnlinkTransactions } = useUnlink();
 
   const { transactions, isLoading, refetch } = useTransactions({
-    walletAddress: safeAddress ?? undefined,
+    walletAddress: (safeAddress ?? address) ?? undefined,
     getUnlinkTransactions,
   });
 
@@ -159,7 +164,7 @@ function MainNavigatorInner() {
     return <AuthScreen />;
   }
 
-  if (safeLoading && !safeAddress) {
+  if (isAuthenticated && !safeAddress) {
     return (
       <View style={styles.loadingScreen}>
         <ActivityIndicator size="large" color="#6366F1" />

@@ -1,8 +1,11 @@
 /**
  * Safe smart account client factory via permissionless.js + Pimlico.
  *
- * Creates a 1-of-1 Safe (v1.4.1) with ERC-4337 (EntryPoint v0.7).
- * Pimlico acts as bundler + paymaster (sponsors gas on testnets).
+ * All permissionless imports are lazy (dynamic import) to avoid
+ * module-scope crashes in React Native.
+ *
+ * The Dynamic walletClient is wrapped via toAccount() so permissionless
+ * gets a local-style account and doesn't call eth_requestAccounts.
  */
 import {
   createPublicClient,
@@ -14,60 +17,93 @@ import {
   type WalletClient,
 } from 'viem';
 import { baseSepolia } from 'viem/chains';
-import { entryPoint07Address } from 'viem/account-abstraction';
-import { privateKeyToAccount } from 'viem/accounts';
-import { toSafeSmartAccount } from 'permissionless/accounts';
-import { createSmartAccountClient } from 'permissionless';
-import { createPimlicoClient } from 'permissionless/clients/pimlico';
+import { privateKeyToAccount, toAccount } from 'viem/accounts';
 import { PIMLICO_API_KEY } from '../config/secrets';
 
 const CHAIN = baseSepolia;
 const RPC_URL = 'https://sepolia.base.org';
-const PIMLICO_URL = `https://api.pimlico.io/v2/${CHAIN.id}/rpc?apikey=${PIMLICO_API_KEY}`;
+const ENTRY_POINT_ADDRESS = '0x0000000071727De22E5E9d8BAf0edAc6f37da032' as const;
 
-export const publicClient = createPublicClient({
-  chain: CHAIN,
-  transport: http(RPC_URL),
-});
+function getPimlicoUrl() {
+  return `https://api.pimlico.io/v2/${CHAIN.id}/rpc?apikey=${PIMLICO_API_KEY}`;
+}
 
-const pimlicoClient = createPimlicoClient({
-  transport: http(PIMLICO_URL),
-  entryPoint: {
-    address: entryPoint07Address,
-    version: '0.7',
-  },
-});
+let _publicClient: ReturnType<typeof createPublicClient> | null = null;
+export function getPublicClient() {
+  if (!_publicClient) {
+    _publicClient = createPublicClient({ chain: CHAIN, transport: http(RPC_URL) });
+  }
+  return _publicClient;
+}
+
+/**
+ * Wrap a Dynamic walletClient into a local-style viem Account.
+ * This prevents permissionless from calling eth_requestAccounts.
+ */
+function wrapDynamicSigner(signer: WalletClient<Transport, Chain, Account>) {
+  const account = signer.account;
+  if (!account) throw new Error('Signer has no account');
+
+  return toAccount({
+    address: account.address,
+    async signMessage({ message }) {
+      return signer.signMessage({ account, message });
+    },
+    async signTypedData(typedData) {
+      return signer.signTypedData({ account, ...typedData } as any);
+    },
+    async signTransaction(tx) {
+      return signer.signTransaction({ account, ...tx } as any);
+    },
+  });
+}
 
 /**
  * Create a Safe smart account client from a viem-compatible signer.
- *
- * The signer can be:
- * - A Dynamic embedded wallet account (from dynamicClient.viem.createWalletClient())
- * - An image-derived key (from createSignerFromPrivateKey())
- *
- * @param signer - A viem WalletClient or Account that can sign messages/txs
- * @param existingSafeAddress - If the Safe is already deployed, pass its address
  */
 export async function createSafeClient(
   signer: WalletClient<Transport, Chain, Account>,
   existingSafeAddress?: `0x${string}`,
 ) {
+  // Lazy imports
+  const { toSafeSmartAccount } = await import('permissionless/accounts');
+  const { createSmartAccountClient } = await import('permissionless');
+  const { createPimlicoClient } = await import('permissionless/clients/pimlico');
+
+  const publicClient = getPublicClient();
+  const pimlicoUrl = getPimlicoUrl();
+
+  const pimlicoClient = createPimlicoClient({
+    transport: http(pimlicoUrl),
+    entryPoint: {
+      address: ENTRY_POINT_ADDRESS,
+      version: '0.7',
+    },
+  });
+
+  // Wrap signer so permissionless doesn't call eth_requestAccounts
+  const localAccount = wrapDynamicSigner(signer);
+
+  console.log('[safe-client] Creating Safe, owner:', localAccount.address);
+
   const safeAccount = await toSafeSmartAccount({
     client: publicClient,
     entryPoint: {
-      address: entryPoint07Address,
+      address: ENTRY_POINT_ADDRESS,
       version: '0.7',
     },
-    owners: [signer],
+    owners: [localAccount],
     version: '1.4.1',
     saltNonce: 0n,
     ...(existingSafeAddress ? { address: existingSafeAddress } : {}),
   });
 
+  console.log('[safe-client] Safe address:', safeAccount.address);
+
   const smartAccountClient = createSmartAccountClient({
     account: safeAccount,
     chain: CHAIN,
-    bundlerTransport: http(PIMLICO_URL),
+    bundlerTransport: http(pimlicoUrl),
     paymaster: pimlicoClient,
     userOperation: {
       estimateFeesPerGas: async () =>
@@ -84,7 +120,6 @@ export async function createSafeClient(
 
 /**
  * Create a viem WalletClient from a raw private key.
- * Used for the image-key login path (no Dynamic involved).
  */
 export function createSignerFromPrivateKey(
   privateKey: `0x${string}`,

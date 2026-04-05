@@ -12,7 +12,7 @@ import type { SmartAccountClient } from 'permissionless';
 
 import { dynamicClient } from '../../client';
 import { useWallet } from '../hooks/useWallet';
-import { createSafeClient, publicClient } from '../lib/safe-client';
+import { createSafeClient, getPublicClient } from '../lib/safe-client';
 import { getSafeOwners, getSafeThreshold } from '../lib/rotate';
 
 const SAFE_ADDRESS_KEY = '@instant/safe-address';
@@ -62,10 +62,10 @@ export function SafeProvider({ children }: { children: React.ReactNode }) {
   const initStartedRef = useRef(false);
 
   useEffect(() => {
+    console.log('[SafeProvider] Check:', { wallet: !!wallet, isAuthenticated, initStarted: initStartedRef.current });
     if (!wallet || !isAuthenticated || initStartedRef.current) return;
     initStartedRef.current = true;
-
-    let cancelled = false;
+    console.log('[SafeProvider] Init starting...');
 
     (async () => {
       try {
@@ -86,29 +86,31 @@ export function SafeProvider({ children }: { children: React.ReactNode }) {
           console.log('[SafeProvider] Loading existing Safe:', storedAddress);
 
           const result = await createSafeClient(signer, storedAddress as `0x${string}`);
-          if (cancelled) return;
 
           setSafeAddress(storedAddress as `0x${string}`);
           setSmartAccountClient(result.smartAccountClient);
           setIsDeployed(storedDeployed === 'true');
+          setIsLoading(false);
+          console.log('[SafeProvider] Safe client ready');
 
+          // Read owners in background (non-blocking)
           if (storedDeployed === 'true') {
-            try {
-              const ownersResult = await getSafeOwners(publicClient, storedAddress as `0x${string}`);
-              const thresholdResult = await getSafeThreshold(publicClient, storedAddress as `0x${string}`);
-              if (!cancelled) {
+            getSafeOwners(getPublicClient(), storedAddress as `0x${string}`)
+              .then((ownersResult) => {
                 setOwners(ownersResult);
-                setThreshold(thresholdResult);
-              }
-            } catch {
-              console.warn('[SafeProvider] Could not read owners');
-            }
+              })
+              .catch(() => console.warn('[SafeProvider] Could not read owners'));
+            getSafeThreshold(getPublicClient(), storedAddress as `0x${string}`)
+              .then((t) => {
+                setThreshold(t);
+              })
+              .catch(() => {});
           }
         } else {
           console.log('[SafeProvider] New user — computing Safe address');
 
           const result = await createSafeClient(signer);
-          if (cancelled) return;
+
 
           const address = result.safeAddress;
           console.log('[SafeProvider] Counterfactual Safe:', address);
@@ -128,34 +130,33 @@ export function SafeProvider({ children }: { children: React.ReactNode }) {
             console.log('[SafeProvider] Deploy tx:', hash);
             await AsyncStorage.setItem(SAFE_DEPLOYED_KEY, 'true');
 
-            if (!cancelled) {
+            {
               setIsDeployed(true);
-              const ownersResult = await getSafeOwners(publicClient, address);
+              const ownersResult = await getSafeOwners(getPublicClient(), address);
               setOwners(ownersResult);
             }
           } catch (err: any) {
             console.error('[SafeProvider] Deploy failed:', err?.message);
-            if (!cancelled) setError(`Deploy pending: ${err?.message}`);
+            setError(`Deploy pending: ${err?.message}`);
           } finally {
-            if (!cancelled) setIsDeploying(false);
+            setIsDeploying(false);
           }
         }
       } catch (err: any) {
         console.error('[SafeProvider] Init failed:', err?.message);
-        if (!cancelled) setError(err?.message || 'Safe init failed');
+        setError(err?.message || 'Safe init failed');
       } finally {
-        if (!cancelled) setIsLoading(false);
+        setIsLoading(false);
       }
     })();
 
-    return () => { cancelled = true; };
   }, [wallet, isAuthenticated]);
 
   const refreshOwners = useCallback(async () => {
     if (!safeAddress) return;
     try {
-      const ownersResult = await getSafeOwners(publicClient, safeAddress);
-      const thresholdResult = await getSafeThreshold(publicClient, safeAddress);
+      const ownersResult = await getSafeOwners(getPublicClient(), safeAddress);
+      const thresholdResult = await getSafeThreshold(getPublicClient(), safeAddress);
       setOwners(ownersResult);
       setThreshold(thresholdResult);
     } catch (err) {
