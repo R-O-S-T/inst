@@ -139,10 +139,11 @@ export function KeyRotationScreen({
       try {
         const wallet = dynamicClient.wallets.userWallets[0];
         if (wallet) {
-          const sig = await dynamicClient.wallets.signMessage({
+          const sigResult = await dynamicClient.wallets.signMessage({
             wallet,
             message: 'unlink-seed-v1',
           });
+          const sig = typeof sigResult === 'string' ? sigResult : sigResult.signedMessage;
           const unlinkSeed = toBytes(sha256(toBytes(sig)));
           const imagePrivKeyBytes = toBytes(derivedResult.privateKey);
           const encrypted = encryptUnlinkSeed(unlinkSeed, imagePrivKeyBytes);
