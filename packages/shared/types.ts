@@ -31,6 +31,7 @@ export interface CreateGiftResponse {
   claimCode: string;
   claimUrl: string;
   giftAddress: string;
+  giftMnemonic: string;
 }
 
 export interface GiftMetadataResponse {

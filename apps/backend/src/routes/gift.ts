@@ -41,6 +41,7 @@ giftRouter.post('/gift', async (req: Request, res: Response) => {
       claimCode,
       claimUrl: `${GIFT_BASE_URL}${claimCode}`,
       giftAddress: unlinkAddress,
+      giftMnemonic: mnemonic,
     });
   } catch (err) {
     logger.error('POST /api/gift failed', err);
