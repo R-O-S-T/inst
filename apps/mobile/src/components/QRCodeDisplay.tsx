@@ -1,8 +1,7 @@
 import React, { useCallback } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-// TODO: Install react-native-qrcode-svg and react-native-svg, then uncomment:
-// import QRCode from 'react-native-qrcode-svg';
+import QRCode from 'react-native-qrcode-svg';
 
 
 interface QRCodeDisplayProps {
@@ -20,12 +19,13 @@ export function QRCodeDisplay({ address, label, size = 200 }: QRCodeDisplayProps
     <View style={styles.container}>
       <Text style={styles.label}>{label}</Text>
 
-      {/* TODO: Replace placeholder with <QRCode value={address} size={size} ... /> */}
-      <View style={[styles.qrPlaceholder, { width: size, height: size }]}>
-        <Text style={styles.qrPlaceholderIcon}>QR</Text>
-        <Text style={styles.qrPlaceholderAddr} numberOfLines={3}>
-          {address}
-        </Text>
+      <View style={[styles.qrPlaceholder, { width: size + 32, height: size + 32 }]}>
+        <QRCode
+          value={address || ' '}
+          size={size}
+          backgroundColor="#FFFFFF"
+          color="#0D0D0D"
+        />
       </View>
 
       <Text style={styles.address} selectable>
