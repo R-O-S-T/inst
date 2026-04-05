@@ -1,6 +1,12 @@
-import type { SendPrivateRequest, SendPrivateResponse, UserBalanceResponse } from '../types';
+import type {
+  SendPrivateRequest,
+  SendPrivateResponse,
+  UserBalanceResponse,
+  CreateGiftResponse,
+  GiftMetadataResponse,
+} from '../types';
 
-const BACKEND_URL = 'http://localhost:3000';
+export const BACKEND_URL = 'https://inst-production-030c.up.railway.app';
 const TIMEOUT_MS = 10_000;
 
 class ApiError extends Error {
@@ -49,4 +55,65 @@ export async function sendPrivate(req: SendPrivateRequest): Promise<SendPrivateR
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
+}
+
+// ── Gift endpoints ───────────────────────────────────────────────────
+
+export async function createGift(
+  senderAddress: string,
+  amount: string,
+  token: string,
+): Promise<CreateGiftResponse> {
+  return request<CreateGiftResponse>(`${BACKEND_URL}/api/gift`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ senderAddress, amount, token }),
+  });
+}
+
+export async function getGiftMetadata(claimCode: string): Promise<GiftMetadataResponse> {
+  return request<GiftMetadataResponse>(
+    `${BACKEND_URL}/api/gift/${encodeURIComponent(claimCode)}`,
+  );
+}
+
+export async function claimGift(
+  claimCode: string,
+  receiverAddress: string,
+): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>(
+    `${BACKEND_URL}/api/gift/${encodeURIComponent(claimCode)}/claim`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ receiverAddress }),
+    },
+  );
+}
+
+export async function registerUnlinkAddress(
+  walletAddress: string,
+  unlinkAddress: string,
+  maxRetries = 5,
+  delayMs = 2000,
+): Promise<void> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      await request<{ success: boolean }>(
+        `${BACKEND_URL}/api/user/${encodeURIComponent(walletAddress)}/unlink`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ unlinkAddress }),
+        },
+      );
+      return;
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 404 && i < maxRetries - 1) {
+        await new Promise((r) => setTimeout(r, delayMs));
+        continue;
+      }
+      throw err;
+    }
+  }
 }

@@ -5,6 +5,11 @@ export type {
   UserCreateWebhookPayload,
   Transaction,
   WalletState,
+  CreateGiftRequest,
+  CreateGiftResponse,
+  GiftMetadataResponse,
+  ClaimGiftRequest,
+  RegisterUnlinkRequest,
 } from '../../../../packages/shared/types';
 
 export {

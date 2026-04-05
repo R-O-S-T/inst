@@ -40,4 +40,17 @@ export function createUnlinkFromSeed(
   });
 }
 
+export function createUnlinkFromMnemonic(
+  walletClient: WalletClient,
+  publicClient: PublicClient,
+  mnemonic: string,
+) {
+  return createUnlink({
+    engineUrl: ENGINE_URL,
+    apiKey: UNLINK_API_KEY,
+    account: unlinkAccount.fromMnemonic({ mnemonic }),
+    evm: unlinkEvm.fromViem({ walletClient, publicClient }),
+  });
+}
+
 export { ENGINE_URL };
