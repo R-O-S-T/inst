@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { ActivityIndicator, Text, View, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
 import { parseUnits } from 'viem';
 
@@ -19,6 +20,8 @@ import { BalanceScreen } from '../screens/BalanceScreen';
 import { SendScreen } from '../screens/SendScreen';
 import { ReceiveScreen } from '../screens/ReceiveScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
+import { KeyRotationScreen } from '../screens/KeyRotationScreen';
 
 // ---------- Connected screen wrappers ----------
 
@@ -146,6 +149,44 @@ function ConnectedHistoryScreen() {
   );
 }
 
+// ---------- Connected Settings & Key Rotation wrappers ----------
+
+function ConnectedSettingsScreen() {
+  const { safeAddress, owners, threshold, isDeployed } = useSafeContext();
+  const { logout } = useWallet();
+  const navigation = useNavigation<any>();
+
+  return (
+    <SettingsScreen
+      safeAddress={safeAddress ?? undefined}
+      owners={owners}
+      threshold={Number(threshold)}
+      isDeployed={isDeployed}
+      onRotateKey={() => navigation.navigate('KeyRotation')}
+      onLogout={logout}
+    />
+  );
+}
+
+function ConnectedKeyRotationScreen() {
+  const { safeAddress, smartAccountClient, owners } = useSafeContext();
+  const { logout } = useWallet();
+  const navigation = useNavigation<any>();
+
+  return (
+    <KeyRotationScreen
+      safeAddress={safeAddress!}
+      currentOwner={owners[0] || ''}
+      smartAccountClient={smartAccountClient!}
+      onComplete={() => {
+        logout();
+        // Navigation will reset automatically because isAuthenticated becomes false
+      }}
+      onCancel={() => navigation.goBack()}
+    />
+  );
+}
+
 // ---------- Tab icon helper ----------
 
 function TabIcon({ label, color }: { label: string; color: string }) {
@@ -155,26 +196,11 @@ function TabIcon({ label, color }: { label: string; color: string }) {
 // ---------- Navigator ----------
 
 const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
 
 import { SafeProvider } from '../providers/SafeProvider';
 
-function MainNavigatorInner() {
-  const { isAuthenticated, isLoading: authLoading } = useWallet();
-  const { safeAddress, isLoading: safeLoading } = useSafeContext();
-
-  if (!isAuthenticated && !authLoading) {
-    return <AuthScreen />;
-  }
-
-  if (isAuthenticated && !safeAddress) {
-    return (
-      <View style={styles.loadingScreen}>
-        <ActivityIndicator size="large" color="#6366F1" />
-        <Text style={styles.loadingText}>Setting up your wallet...</Text>
-      </View>
-    );
-  }
-
+function DynamicTabs() {
   return (
     <Tab.Navigator
       screenOptions={{
@@ -216,7 +242,39 @@ function MainNavigatorInner() {
           tabBarIcon: ({ color }) => <TabIcon label="☰" color={color} />,
         }}
       />
+      <Tab.Screen
+        name="Settings"
+        component={ConnectedSettingsScreen}
+        options={{
+          tabBarIcon: ({ color }) => <TabIcon label="⚙" color={color} />,
+        }}
+      />
     </Tab.Navigator>
+  );
+}
+
+function MainNavigatorInner() {
+  const { isAuthenticated, isLoading: authLoading } = useWallet();
+  const { safeAddress } = useSafeContext();
+
+  if (!isAuthenticated && !authLoading) {
+    return <AuthScreen />;
+  }
+
+  if (isAuthenticated && !safeAddress) {
+    return (
+      <View style={styles.loadingScreen}>
+        <ActivityIndicator size="large" color="#6366F1" />
+        <Text style={styles.loadingText}>Setting up your wallet...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Tabs" component={DynamicTabs} />
+      <Stack.Screen name="KeyRotation" component={ConnectedKeyRotationScreen} />
+    </Stack.Navigator>
   );
 }
 
@@ -225,7 +283,7 @@ function ImageNavigatorInner({
 }: {
   onLogoutImage: () => void;
 }) {
-  const { safeAddress, isLoading: safeLoading } = useSafeContext();
+  const { safeAddress } = useSafeContext();
 
   if (!safeAddress) {
     return (
@@ -237,48 +295,62 @@ function ImageNavigatorInner({
   }
 
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: '#1A1A1A',
-          borderTopColor: '#2A2A2A',
-          borderTopWidth: 1,
-        },
-        tabBarActiveTintColor: '#6366F1',
-        tabBarInactiveTintColor: '#999999',
-      }}
-    >
-      <Tab.Screen
-        name="Balance"
-        options={{
-          tabBarIcon: ({ color }) => <TabIcon label="◉" color={color} />,
-        }}
-      >
-        {() => <ImageConnectedBalanceScreen onLogout={onLogoutImage} />}
-      </Tab.Screen>
-      <Tab.Screen
-        name="Send"
-        component={ConnectedSendScreen}
-        options={{
-          tabBarIcon: ({ color }) => <TabIcon label="↑" color={color} />,
-        }}
-      />
-      <Tab.Screen
-        name="Receive"
-        component={ConnectedReceiveScreen}
-        options={{
-          tabBarIcon: ({ color }) => <TabIcon label="↓" color={color} />,
-        }}
-      />
-      <Tab.Screen
-        name="History"
-        component={ConnectedHistoryScreen}
-        options={{
-          tabBarIcon: ({ color }) => <TabIcon label="☰" color={color} />,
-        }}
-      />
-    </Tab.Navigator>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Tabs">
+        {() => (
+          <Tab.Navigator
+            screenOptions={{
+              headerShown: false,
+              tabBarStyle: {
+                backgroundColor: '#1A1A1A',
+                borderTopColor: '#2A2A2A',
+                borderTopWidth: 1,
+              },
+              tabBarActiveTintColor: '#6366F1',
+              tabBarInactiveTintColor: '#999999',
+            }}
+          >
+            <Tab.Screen
+              name="Balance"
+              options={{
+                tabBarIcon: ({ color }) => <TabIcon label="◉" color={color} />,
+              }}
+            >
+              {() => <ImageConnectedBalanceScreen onLogout={onLogoutImage} />}
+            </Tab.Screen>
+            <Tab.Screen
+              name="Send"
+              component={ConnectedSendScreen}
+              options={{
+                tabBarIcon: ({ color }) => <TabIcon label="↑" color={color} />,
+              }}
+            />
+            <Tab.Screen
+              name="Receive"
+              component={ConnectedReceiveScreen}
+              options={{
+                tabBarIcon: ({ color }) => <TabIcon label="↓" color={color} />,
+              }}
+            />
+            <Tab.Screen
+              name="History"
+              component={ConnectedHistoryScreen}
+              options={{
+                tabBarIcon: ({ color }) => <TabIcon label="☰" color={color} />,
+              }}
+            />
+            <Tab.Screen
+              name="Settings"
+              component={ConnectedSettingsScreen}
+              options={{
+                tabBarIcon: ({ color }) => <TabIcon label="⚙" color={color} />,
+              }}
+            />
+          </Tab.Navigator>
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="KeyRotation" component={ConnectedKeyRotationScreen} />
+    </Stack.Navigator>
   );
 }
 
